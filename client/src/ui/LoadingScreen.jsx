@@ -5,15 +5,29 @@ import { iconUrl } from './icons'
 import StrokeText from './StrokeText'
 
 const TIPS = [
-  'Step up to a ping pong table and rally to gain Power automatically!',
-  'More Power = your serve flies further, and every metre pays Wins!',
-  'Stop the serve meter in the middle for a PERFECT hit: x1.5 Wins!',
+  'Run on a treadmill to gain Power automatically!',
+  'More Power = your kick flies further, and every yard pays Wins!',
+  'Stop the kick meter in the middle for a PERFECT kick: x1.5 distance, x1.6 Wins!',
   'Rebirth at max level for x2, x3, x4... Power and a higher level cap.',
-  'The further your ball flies, the more each metre pays.',
-  'Spend Wins on stronger paddles, pets and better tables.',
+  'The further your ball flies, the more each yard pays.',
+  'Spend Wins on better balls, pets and faster treadmills.',
   'Pets multiply all the Power you gain.',
   'Your ball earns Power every second it flies!',
 ]
+
+/**
+ * The loading screen's backdrop, a stadium at golden hour in plain CSS (no image to
+ * download): two floodlights glowing over a deep blue sky that warms to the horizon, the
+ * dark line of the far stand, and striped turf with white yard lines below it. Layers,
+ * top first.
+ */
+const STADIUM_BACKDROP = [
+  'radial-gradient(circle at 14% 20%, rgba(255,250,225,0.95) 0 0.9%, rgba(255,236,190,0.35) 3%, transparent 9%)',
+  'radial-gradient(circle at 86% 20%, rgba(255,250,225,0.95) 0 0.9%, rgba(255,236,190,0.35) 3%, transparent 9%)',
+  'repeating-linear-gradient(180deg, rgba(255,255,255,0.8) 0 3px, transparent 3px 52px) bottom / 100% 40% no-repeat',
+  'repeating-linear-gradient(180deg, #2b9a47 0 26px, #37b455 26px 52px) bottom / 100% 40% no-repeat',
+  'linear-gradient(180deg, #132f74 0%, #2c5fc0 30%, #f0a067 50%, #ffd08c 54%, #232d48 54.4%, #34436a 60%)',
+].join(', ')
 
 /**
  * Full-screen loading overlay. Progress is drei's asset loader progress, blended with a
@@ -48,18 +62,18 @@ export function LoadingScreen({ done }) {
       className="pp-font absolute inset-0 z-[100] flex flex-col items-center justify-center gap-8 transition-opacity duration-500"
       style={{
         opacity: done ? 0 : 1,
-        background: 'linear-gradient(180deg, #2f8ff2 0%, #6fc0fb 55%, #c6ec86 55.2%, #a9dd6a 100%)',
+        background: STADIUM_BACKDROP,
       }}
     >
       <div className="pp-loading-disc" aria-hidden="true">
         <img src={iconUrl('tire')} alt="" width="150" height="150" draggable={false} />
       </div>
 
-      {/* The game's name: PING PONG over a big rainbow TRAINING!, tilted like a sticker. */}
+      {/* The game's name: +1 KICK over a big rainbow FIELD GOAL!, tilted like a sticker. */}
       <h1 className="m-0 flex flex-col items-center text-center leading-none" style={{ transform: 'rotate(-3deg)' }}>
         <span style={{ fontSize: 'clamp(36px, 8vw, 84px)' }}>
           <StrokeText stroke="0.16em" gradient="linear-gradient(180deg, #ffffff 0%, #ffffff 55%, #ffe36b 56%, #ffb21e 100%)">
-            PING PONG
+            +1 KICK
           </StrokeText>
         </span>
         <span style={{ fontSize: 'clamp(44px, 10vw, 118px)', marginTop: '-0.08em' }}>
@@ -67,19 +81,21 @@ export function LoadingScreen({ done }) {
             stroke="0.15em"
             gradient="linear-gradient(90deg, #ff4a4a 0%, #ff9a1e 18%, #ffe23a 36%, #4be05a 54%, #2fd0ff 72%, #b05cff 90%, #ff5fd2 100%)"
           >
-            TRAINING!
+            FIELD GOAL!
           </StrokeText>
         </span>
         <span className="text-base md:text-xl" style={{ marginTop: '0.4em' }}>
-          <StrokeText stroke={5}>TRAIN • SERVE • REBIRTH</StrokeText>
+          <StrokeText stroke={5}>RUN • KICK • REBIRTH</StrokeText>
         </span>
       </h1>
 
       <div className="w-[min(560px,80vw)]">
         <div className="relative h-9 overflow-hidden rounded-xl border-4 border-black bg-black/40">
           <div
-            className="h-full rounded-md transition-[width] duration-200"
-            style={{ width: `${shown}%`, background: 'linear-gradient(180deg, #fff27a 0%, #ffc61e 50%, #ff9a12 100%)' }}
+            // Scaled, not resized: it moves while the game is starting up, and a transform
+            // never needs a layout.
+            className="h-full origin-left rounded-md transition-transform duration-200"
+            style={{ transform: `scaleX(${shown / 100})`, background: 'linear-gradient(180deg, #fff27a 0%, #ffc61e 50%, #ff9a12 100%)' }}
           />
           <div className="absolute inset-0 flex items-center justify-center text-lg">
             <StrokeText stroke={5}>{done ? 'READY!' : `LOADING ${Math.round(shown)}%`}</StrokeText>

@@ -1,211 +1,170 @@
-import { STYLE } from '../materials'
-
 /**
- * Each stage theme's colours (each stage names one in its `theme`): the sky the lane
- * flies under, the HUD's name gradient, and the floor/gate tints the dust and spray
- * effects borrow. The stages have no gates or canyon any more - only their sky, name
- * and pay rate change as the ball flies on.
+ * Each stage theme's colours (each stage names one in its `theme`): the sky the ball flies
+ * under (Lane.jsx blends the sky and fog to it as you reach the stage), the HUD's name
+ * gradient, and the floor/gate tints the landing spray and the stage-start line borrow.
+ *
+ * Every sky is a game-day sky of its own - golden hour in the Backyard, a blue afternoon at
+ * High School, hot orange haze in the desert, a pink beach sunset, an icy dusk, purple
+ * twilight at College, a red-black volcano glow, black starry space with the Earth's glow
+ * on the Moon, a floodlit night for the Championship... `sky` is { top, horizon, sun,
+ * glow, clouds, stars } (see Sky.jsx).
  */
 export const ZONE_THEMES = {
   grassy: {
-    floor: '#c68656',
-    wall: '#bf7f4e',
-    ledge: '#58cf3a',
-    gate: '#3fd13f',
-    sky: ['#2f8ff2', '#a6d6fb'],
+    floor: '#3ad456',
+    gate: '#ffc21a',
+    sky: { top: '#1d4fb6', horizon: '#ffb98c', sun: '#fff0c4', glow: 0.9, clouds: 0.55 },
     name: ['#e6ffb0', '#8dff4f', '#2fd12f'],
   },
+  autumn: {
+    floor: '#5cc544',
+    gate: '#ff7a1e',
+    sky: { top: '#2a7fe8', horizon: '#d4ecff', sun: '#ffffff', glow: 0.35, clouds: 0.75 },
+    name: ['#ffe2b0', '#ffa646', '#e8620c'],
+  },
   desert: {
-    floor: '#ecdc93',
-    wall: '#e4d088',
-    ledge: '#f5e6a8',
+    floor: '#e8c46e',
     gate: '#ffb12a',
-    sky: ['#3a9ff0', '#f3e1ae'],
+    sky: { top: '#3a63c4', horizon: '#ffae58', sun: '#ffe2a0', glow: 1.0, clouds: 0.1 },
     name: ['#fffaa8', '#ffd52a', '#ff9c00'],
   },
   beach: {
     floor: '#f6e3a6',
-    wall: '#e9cf8a',
-    ledge: '#ffe8a8',
     gate: '#2fc6ff',
-    sky: ['#1f9cf5', '#bdf0ff'],
+    sky: { top: '#5547c4', horizon: '#ff98b6', sun: '#ffd4a8', glow: 0.95, clouds: 0.6 },
     name: ['#e0fbff', '#5fe0ff', '#1a9cf0'],
   },
   frozen: {
-    floor: '#bfe5ff',
-    wall: '#a6d8fb',
-    ledge: '#ffffff',
+    floor: '#e6f4ff',
     gate: '#5cc8ff',
-    sky: ['#57aef0', '#e4f4ff'],
+    sky: { top: '#43609e', horizon: '#e4ebff', sun: '#ffe6ef', glow: 0.55, clouds: 0.45 },
     name: ['#ffffff', '#c9f1ff', '#5cc8ff'],
   },
-  autumn: {
-    floor: '#bb7a4c',
-    wall: '#a86a40',
-    ledge: '#f0952c',
-    gate: '#ff7a1e',
-    sky: ['#3d8fe0', '#f6d3a4'],
-    name: ['#ffe2b0', '#ffa646', '#e8620c'],
-  },
-  candy: {
-    floor: '#ffc2e2',
-    wall: '#ffa8d6',
-    ledge: '#fff2fa',
-    gate: '#ff5fb8',
-    sky: ['#7a8cff', '#ffd6f0'],
-    name: ['#ffe6f6', '#ff9cd6', '#ff3fa8'],
-  },
-  volcano: {
-    floor: '#433a3d',
-    wall: '#352e31',
-    ledge: '#5a4943',
-    gate: '#ff4a1c',
-    sky: ['#5a2a3a', '#d27a52'],
-    name: ['#ffd0b0', '#ff7a3c', '#e2240c'],
-  },
-  crystal: {
-    floor: '#5d44ad',
-    wall: '#4a3394',
-    ledge: '#8f6bff',
-    gate: '#c08bff',
-    sky: ['#2a1e6a', '#8a7ae0'],
-    name: ['#f2e6ff', '#c69bff', '#8a3ee8'],
-  },
-  sky: {
-    floor: '#f2f7ff',
-    wall: '#dbe9ff',
-    ledge: '#ffffff',
-    gate: '#ffd84a',
-    sky: ['#5fb8ff', '#fff4d6'],
-    name: ['#ffffff', '#ffe98a', '#ffb21e'],
-  },
   jungle: {
-    floor: '#7a9a4a',
-    wall: '#5f7a3a',
-    ledge: '#2f9a3a',
+    floor: '#3fae4a',
     gate: '#3fd16a',
-    sky: ['#2f9ad8', '#cfeec0'],
+    sky: { top: '#1c6f80', horizon: '#c6eeb8', sun: '#fff6c0', glow: 0.5, clouds: 0.7 },
     name: ['#e6ffd0', '#7dff7a', '#1fa83a'],
   },
   cherry: {
-    floor: '#f6d6e4',
-    wall: '#e8b8cc',
-    ledge: '#ffe0ee',
+    floor: '#5fe068',
     gate: '#ff7ab8',
-    sky: ['#7ab4ff', '#ffe4f0'],
+    sky: { top: '#33247e', horizon: '#ff9db0', sun: '#ffc6d4', glow: 0.75, clouds: 0.5 },
     name: ['#fff0f8', '#ffa8d4', '#ff4f9a'],
   },
+  candy: {
+    floor: '#ffc2e2',
+    gate: '#ff5fb8',
+    sky: { top: '#5f50dc', horizon: '#ffd2ee', sun: '#ffffff', glow: 0.6, clouds: 0.7 },
+    name: ['#ffe6f6', '#ff9cd6', '#ff3fa8'],
+  },
   mushroom: {
-    floor: '#8a6a9a',
-    wall: '#6f5280',
-    ledge: '#7ad05a',
+    floor: '#4cca6e',
     gate: '#c46bff',
-    sky: ['#5a6ad8', '#e0c8ff'],
+    sky: { top: '#2a2470', horizon: '#d6a2ff', sun: '#ffe0ff', glow: 0.6, clouds: 0.4 },
     name: ['#f4e6ff', '#d29bff', '#9a3be8'],
   },
+  volcano: {
+    floor: '#4a2a24',
+    gate: '#ff4a1c',
+    sky: { top: '#16080c', horizon: '#ff5a2a', sun: '#ff7a3a', glow: 1.0, clouds: 0.35 },
+    name: ['#ffd0b0', '#ff7a3c', '#e2240c'],
+  },
   swamp: {
-    floor: '#6a8a5a',
-    wall: '#4f6a44',
-    ledge: '#5fb04a',
+    floor: '#58ae46',
     gate: '#8ae04a',
-    sky: ['#4a9ab8', '#d8f0c8'],
+    sky: { top: '#1c3838', horizon: '#b6d690', sun: '#f0ffb0', glow: 0.5, clouds: 0.6 },
     name: ['#f0ffd8', '#b8f05a', '#5ab82a'],
   },
+  crystal: {
+    floor: '#5cd89a',
+    gate: '#c08bff',
+    sky: { top: '#120a36', horizon: '#9a7aff', sun: '#e2d2ff', glow: 0.6, clouds: 0.2, stars: 0.4 },
+    name: ['#f2e6ff', '#c69bff', '#8a3ee8'],
+  },
   ocean: {
-    floor: '#f2e2b0',
-    wall: '#3f9ac8',
-    ledge: '#5fd0e8',
+    floor: '#4cd8b0',
     gate: '#ff7a8a',
-    sky: ['#1a6ad0', '#8ae8ff'],
+    sky: { top: '#0e3c8c', horizon: '#80deff', sun: '#fff4d0', glow: 0.6, clouds: 0.5 },
     name: ['#e0fbff', '#7fe8ff', '#1a9cd8'],
   },
   neon: {
-    floor: '#1d1d2e',
-    floorStyle: STYLE.ROAD,
-    wall: '#26263a',
-    ledge: '#39ff88',
-    ledgeStyle: STYLE.GLOW,
+    floor: '#27b068',
     gate: '#ff3bd8',
-    sky: ['#120a30', '#5a2a8a'],
+    sky: { top: '#05051a', horizon: '#6a2480', sun: '#ff5fd2', glow: 0.6, clouds: 0, stars: 0.5 },
     name: ['#e6fff0', '#39ff88', '#1ab85a'],
   },
-  rainbow: {
-    floor: '#ffffff',
-    floorStyle: STYLE.RAINBOW,
-    wall: '#f4f0ff',
-    ledge: '#ffffff',
+  sky: {
+    floor: '#62e27c',
     gate: '#ffd84a',
-    sky: ['#6a8aff', '#ffe8f8'],
+    sky: { top: '#1f6ae0', horizon: '#ffe4b6', sun: '#ffffff', glow: 0.5, clouds: 0.85 },
+    name: ['#ffffff', '#ffe98a', '#ffb21e'],
+  },
+  rainbow: {
+    floor: '#52e49c',
+    gate: '#ffd84a',
+    sky: { top: '#5878ff', horizon: '#ffe0a0', sun: '#ffffff', glow: 0.7, clouds: 0.6 },
     name: ['#ffffff', '#ffb8f0', '#ff5fd2'],
   },
   moon: {
-    floor: '#b8bcc8',
-    wall: '#9a9eac',
-    ledge: '#d8dce6',
+    floor: '#9aa0b0',
     gate: '#5fc8ff',
-    sky: ['#0a0a24', '#3a3a5a'],
+    sky: { top: '#000006', horizon: '#18284a', sun: '#7fb8ff', glow: 0.8, clouds: 0, stars: 1 },
     name: ['#ffffff', '#cfd8ea', '#7f8aa8'],
   },
   aurora: {
-    floor: '#d8f0ff',
-    wall: '#9ac8e8',
-    ledge: '#ffffff',
+    floor: '#72e6b2',
     gate: '#5fffc8',
-    sky: ['#0f2a5a', '#5ad8b8'],
+    sky: { top: '#061a2a', horizon: '#2fc6a0', sun: '#a2ffe0', glow: 0.5, clouds: 0.3, stars: 0.6 },
     name: ['#e0fff4', '#7fffd0', '#2fc89a'],
   },
-  cosmic: {
-    floor: '#2a0f4a',
-    floorStyle: STYLE.GALAXY,
-    wall: '#3a1a6a',
-    wallStyle: STYLE.GALAXY,
-    ledge: '#ff5bd8',
-    ledgeStyle: STYLE.GLOW,
-    gate: '#ff5bd8',
-    sky: ['#0a0018', '#3a0a4a'],
-    name: ['#ffe6fb', '#ff9cf0', '#d43bc8'],
-  },
   space: {
-    floor: '#1b1f5c',
-    floorStyle: STYLE.GALAXY,
-    wall: '#262b70',
-    wallStyle: STYLE.GALAXY,
-    ledge: '#7a5cff',
-    ledgeStyle: STYLE.GLOW,
+    floor: '#349c8a',
     gate: '#8a63ff',
-    sky: ['#05051a', '#241544'],
+    sky: { top: '#03040f', horizon: '#24305a', sun: '#ffffff', glow: 0.25, clouds: 0, stars: 0.9 },
     name: ['#e6e0ff', '#a98bff', '#6a4cff'],
+  },
+  cosmic: {
+    floor: '#8a46ae',
+    gate: '#ff5bd8',
+    sky: { top: '#0a0018', horizon: '#5a1a6a', sun: '#ff9cf0', glow: 0.6, clouds: 0, stars: 0.9 },
+    name: ['#ffe6fb', '#ff9cf0', '#d43bc8'],
   },
 }
 
 /**
- * How each stage theme dresses the serve lane: the field's colour and pattern either
- * side of the rainbow lane, and the scenery standing along it (`prop`, one of Lane.jsx's
- * PROPS, in `colors`). Every stage looks like its own place, with no gate between them.
+ * How each stage theme dresses the kick field: `field` is the ground out past the stands
+ * (car park asphalt, sand, snow, lava rock... in `style`), `turf` the two mown greens of
+ * the pitch and the turf beside it, and `colors` the city skyline standing beyond the
+ * stands (Lane.jsx's buildings), hazy in the stage's light. Every stage looks like its
+ * own place through its colours; the pitch is always a football field.
  */
 export const STAGE_LOOKS = {
-  grassy: { field: '#4fd63a', prop: 'tree', colors: ['#3fbf3a', '#7ae84a', '#ff5fa8'] },
-  autumn: { field: '#d9b24a', prop: 'tree', colors: ['#ff8a2a', '#ffc13a', '#d8342a'] },
-  desert: { field: '#f2d27a', prop: 'cactus', colors: ['#3fae4a', '#2f8f3a', '#ff5fa8'] },
-  beach: { field: '#f6e3a6', prop: 'palm', colors: ['#3fd15a', '#8a5a2a', '#2fc6ff'] },
-  jungle: { field: '#2fae4a', prop: 'palm', colors: ['#1f8f3a', '#7a4a24', '#ffd21f'] },
-  frozen: { field: '#eef8ff', prop: 'snowman', colors: ['#ffffff', '#ff8a1e', '#2f6fe0'] },
-  cherry: { field: '#8fdc6a', prop: 'tree', colors: ['#ffa8d4', '#ffd6ea', '#ffffff'] },
-  candy: { field: '#ffc2e2', prop: 'lollipop', colors: ['#ff4fa8', '#ffffff', '#7fe2ff'] },
-  mushroom: { field: '#7ccf5a', prop: 'mushroom', colors: ['#ff3b5c', '#ffffff', '#fff3e0'] },
-  volcano: { field: '#4a2a24', style: 'LAVA', prop: 'lava', colors: ['#3a2420', '#ff6a1e', '#ffd21f'] },
-  swamp: { field: '#6fae3a', prop: 'mushroom', colors: ['#8a4dff', '#d9c6ff', '#e8f0c8'] },
-  crystal: { field: '#d6c8ff', prop: 'crystal', colors: ['#b98bff', '#7fe2ff', '#8a7aa8'] },
-  ocean: { field: '#2fc0e8', style: 'WATER', prop: 'crystal', colors: ['#ff7a6a', '#ffb0c8', '#e8d29a'] },
-  neon: { field: '#1d2246', prop: 'crystal', colors: ['#39ff88', '#ff3bd8', '#2a2f5a'] },
-  sky: { field: '#e8f6ff', prop: 'cloud', colors: ['#ffffff', '#e0f0ff', '#ffffff'] },
-  rainbow: { field: '#ffe6f6', prop: 'lollipop', colors: ['#ff5fd2', '#ffe23a', '#2fd0ff'] },
-  moon: { field: '#b8bcc8', prop: 'crystal', colors: ['#d6dbe6', '#9aa0b0', '#6e7385'] },
-  aurora: { field: '#c8fff0', prop: 'snowman', colors: ['#ffffff', '#5fffc8', '#7a5cff'] },
-  space: { field: '#1b1f5c', style: 'GALAXY', prop: 'crystal', colors: ['#8a63ff', '#5fd6ff', '#3a2a7a'] },
-  cosmic: { field: '#2a1450', style: 'GALAXY', prop: 'crystal', colors: ['#ff5bd8', '#ffd21f', '#4a1f7a'] },
+  grassy: { field: '#555b68', style: 'ROAD', turf: ['#2fbf47', '#3ad456'], colors: ['#5a6787', '#776c8c', '#ffd27a'] },
+  autumn: { field: '#5d5f66', style: 'ROAD', turf: ['#4fae3a', '#5cc544'], colors: ['#6f7f9f', '#8a8fa8', '#ffe8b0'] },
+  desert: { field: '#d8b06a', style: 'ROAD', turf: ['#7fb83a', '#8fca46'], colors: ['#c08a5a', '#a8784e', '#ffe0a0'] },
+  beach: { field: '#e8d29a', style: 'ROAD', turf: ['#3fc65a', '#4cda68'], colors: ['#8a6aa8', '#c47a9a', '#ffd0e0'] },
+  jungle: { field: '#3f6a3a', style: 'ROAD', turf: ['#1f9a3a', '#27ae46'], colors: ['#3f6a6f', '#557a6a', '#e6ffb0'] },
+  frozen: { field: '#dfeaf6', style: 'ROAD', turf: ['#9fdcb4', '#b4ecc6'], colors: ['#8a9ac0', '#a8b4d0', '#fff0f6'] },
+  cherry: { field: '#4a4466', style: 'ROAD', turf: ['#4fcf5a', '#5fe068'], colors: ['#5a4a8a', '#7a5a9a', '#ffc0d8'] },
+  candy: { field: '#e6b8d8', style: 'ROAD', turf: ['#52d66a', '#66e87c'], colors: ['#a07ac8', '#d08ab8', '#ffffff'] },
+  mushroom: { field: '#3c3466', style: 'ROAD', turf: ['#3fb860', '#4cca6e'], colors: ['#4a3a8a', '#6a4a9a', '#ffd0ff'] },
+  volcano: { field: '#4a2a24', style: 'LAVA', turf: ['#3a8a3a', '#46a046'], colors: ['#2a1a1e', '#3a2026', '#ff7a3a'] },
+  swamp: { field: '#3a4a36', style: 'ROAD', turf: ['#4a9a3a', '#58ae46'], colors: ['#3a5048', '#4a5f4f', '#f0ffb0'] },
+  crystal: { field: '#2a2450', style: 'ROAD', turf: ['#4fc68a', '#5cd89a'], colors: ['#2a2460', '#3a2c78', '#c8b0ff'] },
+  ocean: { field: '#2fa0c8', style: 'WATER', turf: ['#3fc6a0', '#4cd8b0'], colors: ['#2a5a8a', '#3a6f9a', '#e0fbff'] },
+  neon: { field: '#1d2246', style: 'ROAD', turf: ['#1f9a5a', '#27b068'], colors: ['#14163a', '#1f1a4a', '#ff3bd8'] },
+  sky: { field: '#5d6170', style: 'ROAD', turf: ['#4fd06a', '#62e27c'], colors: ['#7a8ab0', '#9aa4c0', '#ffffff'] },
+  rainbow: { field: '#6a6080', style: 'ROAD', turf: ['#3fd08a', '#52e49c'], colors: ['#7a7ac8', '#a08ac8', '#fff2a0'] },
+  moon: { field: '#8a8f9c', style: 'ROAD', turf: ['#8a90a0', '#9aa0b0'], colors: ['#3a3f50', '#4a4f60', '#7fb8ff'] },
+  aurora: { field: '#20384a', style: 'ROAD', turf: ['#5fd4a0', '#72e6b2'], colors: ['#163040', '#1f4050', '#7fffd0'] },
+  space: { field: '#141a40', style: 'GALAXY', turf: ['#2a8a7a', '#349c8a'], colors: ['#10142e', '#181c3e', '#ffffff'] },
+  cosmic: { field: '#2a1450', style: 'GALAXY', turf: ['#7a3a9a', '#8a46ae'], colors: ['#1a0a30', '#26103e', '#ff9cf0'] },
 }
 
-/** The serve lane's rainbow bands, LANE_STRIPE metres each (Lane.jsx; Impact.jsx's chunks). */
-export const LANE_STRIPE = 4
-export const LANE_RAINBOW = ['#ff4a4a', '#ff9a1e', '#ffe23a', '#4be05a', '#2fd0ff', '#3a6bff', '#b05cff', '#ff5fd2']
+/**
+ * The turf's stripes, LANE_STRIPE yards each, alternating light and dark (Lane.jsx; Impact.jsx
+ * borrows these two greens for the chunks a landing throws up).
+ */
+export const LANE_STRIPE = 5
+export const LANE_RAINBOW = ['#2fbf47', '#3ad456']

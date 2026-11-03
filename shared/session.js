@@ -13,6 +13,7 @@ import {
   buyShopItem,
   buyTire,
   claimDaily,
+  claimSecretStar,
   claimFreeReward,
   claimPlaytime,
   createSession,
@@ -28,7 +29,7 @@ import {
   usePortal,
   usePotion,
 } from './logic.js'
-import { eggStandNear, FREE_REWARD, inRect, inRollZone, MAX_MOVE_SPEED, onPad, portalAt, standRect, TIRE_STANDS } from './world.js'
+import { eggStandNear, FREE_REWARD, inRect, inRollZone, MAX_MOVE_SPEED, onPad, portalAt, STAR, standRect, TIRE_STANDS } from './world.js'
 
 const TIRE_INDEX = Object.fromEntries(TIRES.map((t, i) => [t.id, i]))
 /** Reaching Outer Space earns its badge; the last stage has its own. */
@@ -159,8 +160,8 @@ export class PlayerSession {
     },
 
     /**
-     * Serves your ball: only from the SERVE ZONE, and not while one is still out.
-     * `accuracy` (0-1) is where the timing meter stopped; absent for Auto Serve.
+     * Kicks your ball: only from the KICK ZONE, and not while one is still out.
+     * `accuracy` (0-1) is where the timing meter stopped; absent for Auto Kick.
      */
     roll(payload, now) {
       if (now < this.busyUntil) return
@@ -264,6 +265,16 @@ export class PlayerSession {
       if (Math.hypot(p.x - FREE_REWARD.x, p.z - FREE_REWARD.z) > FREE_REWARD.radius + 1.5) return
       const result = claimFreeReward(this.profile, this.session)
       this.afterReward(result)
+    },
+
+    /** Picks up Palm Beach's Secret Star: only standing at it, in Palm Beach, once. */
+    findStar() {
+      const p = this.getPosition()
+      if (Math.hypot(p.x - STAR.x, p.z - STAR.z) > STAR.radius + 1) return
+      if (!claimSecretStar(this.profile)) return
+      this.dirty = true
+      this.emit('star', {})
+      this.badge('secretStar')
     },
 
     portal() {

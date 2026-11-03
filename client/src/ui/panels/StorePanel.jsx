@@ -30,8 +30,8 @@ const ICONS = {
 
 const BLURBS = {
   healthX2: 'Double every Power gain, forever',
-  winsX2: 'Double the Wins from every serve, forever',
-  autoRoll: 'Serves for you on the Serve Zone',
+  winsX2: 'Double the Wins from every kick, forever',
+  autoRoll: 'Kicks for you on the Kick Zone',
   padVeryOp: 'Unlocks the x40 Diamond Pad',
   padBest: 'Unlocks the x100 Galaxy Pad',
   sphinx: `Limited: x${formatNumber(PETS.sphinx.mult)} Power pet`,
@@ -158,7 +158,7 @@ function FreeSection() {
   )
 }
 
-/** Everything Wins can buy besides tires, eggs and Health packs, grouped, plus Gems and free rewards. */
+/** Everything Wins can buy besides balls, eggs and Health packs, grouped, plus Gems and free rewards. */
 export function StorePanel() {
   const passes = useGame((s) => s.profile.passes)
   const wins = useGame((s) => s.profile.wins)

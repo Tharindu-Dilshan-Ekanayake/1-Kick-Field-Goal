@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 /**
  * Chunky outlined text in the game's style: a thick black outline with a drop under it
  * and a solid or gradient fill.
@@ -10,8 +12,10 @@
  *           gradient?: string, className?: string, style?: object }} props
  *   `stroke` is the outline width (CSS length or px number). `gradient` is any CSS
  *   gradient and wins over `fill`.
+ *
+ * Memoised: the HUD is full of these, and most re-render with the same text.
  */
-export function StrokeText({ children, stroke = 6, fill = '#ffffff', gradient, className = '', style }) {
+export const StrokeText = memo(function StrokeText({ children, stroke = 6, fill = '#ffffff', gradient, className = '', style }) {
   const width = typeof stroke === 'number' ? `${stroke}px` : stroke
   const fillStyle = gradient
     ? { backgroundImage: gradient, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }
@@ -26,6 +30,6 @@ export function StrokeText({ children, stroke = 6, fill = '#ffffff', gradient, c
       </span>
     </span>
   )
-}
+})
 
 export default StrokeText

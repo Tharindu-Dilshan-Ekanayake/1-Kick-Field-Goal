@@ -6,10 +6,9 @@ import { remotePlayers } from '../../net/remotePlayers'
 import { getQuality } from '../../store/quality'
 import { createBoxInstances, disposeBlocks } from '../blocks'
 import { sharedMaterials, STYLE } from '../materials'
-import { PAD_YAW, padAt } from '@shared/world'
+import { PAD_YAW } from '@shared/world'
 
-import { createBallMesh, disposeBallMesh } from '../ball'
-import { RALLY_BALL_SIZE, rallyBall } from '../pong'
+import { RUN_CADENCE } from '../kick'
 import { runtime } from '../runtime'
 import { hideNameplatesFrom, NAMEPLATE_POOL_SIZE, placeNameplate } from './nameplates'
 
@@ -123,30 +122,25 @@ function writeNameplate(plate, name, at, distance, maxDistance, camera, size, ui
 /**
  * Everyone else in the lobby: blocky avatars (one InstancedMesh for every limb of every
  * player), name tags and their pets (handed to the shared pet renderer). While someone
- * rolls they stay on the Roll Zone, watching; their tire is the ghost tire Roll.jsx
- * replays down the track. At a training table their rally ball flies between them and
- * the robot (drawn here for everyone, real avatars included). Hidden past the preset's
- * draw distance.
+ * kicks they stay on the Kick Zone, watching; their ball is the ghost ball Roll.jsx
+ * replays down the field. On a treadmill they sprint on the spot. Hidden past the
+ * preset's draw distance.
  */
 export function RemotePlayers() {
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   const bodyRef = useRef(null)
-  const tiresRef = useRef(null)
 
   const assets = useMemo(() => {
     // Smooth toy boxes: the shared toy material, so no extra shader program.
     const body = createBoxInstances(MAX_REMOTES * PARTS, sharedMaterials().toy, STYLE.SMOOTH)
     body.castShadow = true
-    // Trainers' rally balls.
-    const tires = createBallMesh(MAX_REMOTES)
-    return { body, tires }
+    return { body }
   }, [])
 
   useEffect(
     () => () => {
       disposeBlocks(assets.body)
-      disposeBallMesh(assets.tires)
       hideNameplatesFrom(0)
     },
     [assets],
@@ -154,8 +148,7 @@ export function RemotePlayers() {
 
   useFrame((state, rawDelta) => {
     const body = bodyRef.current
-    const tires = tiresRef.current
-    if (!body || !tires) return
+    if (!body) return
     const delta = Math.min(rawDelta, 0.05)
     const settings = getQuality()
     const now = performance.now()
@@ -164,7 +157,6 @@ export function RemotePlayers() {
 
     let instance = 0
     let plate = 0
-    let trainers = 0
     runtime.remotePets.length = 0
 
     for (const r of remotePlayers.values()) {
@@ -178,24 +170,16 @@ export function RemotePlayers() {
       r.shadow.visible = visible
       const running = r.anim === 'run'
 
-      // Training: their rally ball, between them and the table's robot.
-      const pad = visible && running && trainers < MAX_REMOTES ? padAt(r.position.x, r.position.z) : -1
-      if (pad >= 0) {
-        rallyBall(t, pad, r.position.x, r.position.y, r.position.z, _v)
-        tires.setMatrixAt(trainers, _m.compose(_v, _q.identity(), _s.setScalar(RALLY_BALL_SIZE)))
-        tires.setBall(trainers, r.tireId)
-        trainers += 1
-      }
-
       // Players drawn as their real avatar (RemoteAvatars) skip the blocky figure.
       if (visible && !r.fullAvatar && instance + PARTS <= MAX_REMOTES * PARTS) {
         const walking = !running && r.speed > 0.6
         if (walking) r.walkPhase += delta * (6 + Math.min(r.speed, 10) * 0.5)
-        const swing = walking ? Math.sin(r.walkPhase) * 0.9 : 0
+        // Sprinting on a treadmill: legs and arms pumping at full stride, going nowhere.
+        if (running) r.walkPhase += delta * RUN_CADENCE
+        const swing = walking || running ? Math.sin(r.walkPhase) * (running ? 1.1 : 0.9) : 0
         _q.setFromAxisAngle(_up, running ? PAD_YAW : r.yaw)
         _base.compose(r.position, _q, _s.set(1, 1, 1))
-        // Rallying: the paddle arm up and swinging.
-        instance = writeFigure(body, instance, r, _base, swing, running ? -1.2 + Math.sin(t * 10) * 0.6 : null)
+        instance = writeFigure(body, instance, r, _base, swing, running ? -swing * 0.9 : null)
       }
 
       // Name tag, just above the head (players are 1.8 tall).
@@ -227,14 +211,11 @@ export function RemotePlayers() {
     body.count = instance
     body.instanceMatrix.needsUpdate = true
     if (body.instanceColor) body.instanceColor.needsUpdate = true
-    tires.count = trainers
-    tires.instanceMatrix.needsUpdate = true
   })
 
   return (
     <>
       <primitive ref={bodyRef} object={assets.body} />
-      <primitive ref={tiresRef} object={assets.tires} />
     </>
   )
 }

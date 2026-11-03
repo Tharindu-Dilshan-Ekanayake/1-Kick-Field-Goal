@@ -29,13 +29,13 @@ export function formatGain(value) {
   return formatNumber(value)
 }
 
-/** Metres slid: "1,050 m" in full up to a million, then like formatNumber. */
+/** Yards kicked: "1,050 yd" in full up to a million, then like formatNumber. */
 export function formatDistance(meters) {
   const m = Math.max(0, Math.floor(meters))
-  if (m >= 1e6) return `${formatNumber(m)} m`
+  if (m >= 1e6) return `${formatNumber(m)} yd`
   let s = String(m)
   for (let i = s.length - 3; i > 0; i -= 3) s = `${s.slice(0, i)},${s.slice(i)}`
-  return `${s} m`
+  return `${s} yd`
 }
 
 /** Multiplier display: x1, x1.65, x2.5, x12, x1.2K. */

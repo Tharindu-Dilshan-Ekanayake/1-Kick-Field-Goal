@@ -4,13 +4,13 @@
  * Shared by the client (which renders it) and the server (which validates positions
  * against it), so the two can never disagree about where a pad or the roll zone is.
  *
- * Units are roughly metres - the avatar is 1.8 tall. +X is east, -Z is north, which is
+ * Units are roughly metres in the lobby (the avatar is 1.8 tall) and yards down the kick field. +X is east, -Z is north, which is
  * "forward" from spawn and the way down the track.
  *
- * Seen from spawn: the serve zone and the lane beyond it straight ahead (north), the
- * training courts along the right (east) side, the paddle showroom on the left (west),
+ * Seen from spawn: the kick zone and the field beyond it straight ahead (north), the
+ * treadmills along the right (east) side, the ball shop on the left (west),
  * the eggs in a row back on the left, the Volcano egg front right, the leaderboards
- * behind. Grandstands ring the whole plaza, like a ping pong arena.
+ * behind. Grandstands ring the whole plaza, like a football stadium.
  *
  * Rects are `{ minX, maxX, minZ, maxZ }` on the ground plane.
  */
@@ -23,11 +23,11 @@ export const PLAZA = { minX: -50, maxX: 50, minZ: -40, maxZ: 36 }
 // --- The track ----------------------------------------------------------------------
 
 /**
- * The start of the track: the plaza's north edge, where the canyon starts. Track metre
- * m is m metres along the track from here.
+ * The start of the field: the plaza's north edge, where the kick field starts. Track metre
+ * m is m yards along the field from here.
  */
 export const TRACK_START_Z = PLAZA.minZ
-/** How steeply the serve lane drops away from the start: 0, dead level all the way. */
+/** How steeply the kick field drops away from the start: 0, dead level all the way. */
 export const SLOPE_ANGLE = 0
 /** Half the width of the canyon floor. */
 export const CANYON_HALF_WIDTH = 16
@@ -45,11 +45,12 @@ export const WALKABLE = [PLAZA]
 // --- Training pads ------------------------------------------------------------------
 
 /**
- * Training courts line the east side of the plaza, south to north: a round mat to stand
- * on (the pad: standing on it is training) and a ping pong table beyond it to the east,
- * with a ball robot at the far end feeding you balls to hit back.
+ * Treadmills line the east side of the plaza, south to north: a round mat to run on
+ * (the pad: standing on it is training, facing east) with the treadmill's belt on it and
+ * its console and multiplier backboard just beyond to the east, then a running track.
  */
-export const PAD_COUNT = 7
+/** Seven treadmills, then Palm Beach's two beach treadmills at the north end of the row. */
+export const PAD_COUNT = 9
 export const PAD_PITCH = 7
 /** Radius of a pad's top: standing within it is training. */
 export const PAD_RADIUS = 2.7
@@ -62,21 +63,22 @@ const PAD0_Z = 24
 export const padCenterZ = (index) => PAD0_Z - index * PAD_PITCH
 
 /**
- * Each pad's ping pong table, on the ground east of it: a big cartoon table (players
- * are 1.8 tall) running east-west, its near end just past the mat. Training, you face it
- * (east) and rally with the robot at the far end.
+ * Each pad's console area, on the ground east of it: these constants (named for the
+ * template's table, kept so the server's colliders and saves don't change) bound the
+ * solid block of console, handrails and backboard drawn there. Training, you face it (east)
+ * and run.
  */
 export const TABLE_LENGTH = 4.2
 export const TABLE_WIDTH = 2.4
 export const TABLE_HEIGHT = 1.05
-/** The table's near (west) end, its middle, and the ball robot beyond its far end. */
+/** The solid block's near (west) end, its middle, and its far end beyond the backboard. */
 export const TABLE_NEAR_X = PAD_X + PAD_RADIUS + 0.05
 export const TABLE_X = TABLE_NEAR_X + TABLE_LENGTH / 2
 export const ROBOT_X = TABLE_NEAR_X + TABLE_LENGTH + 0.6
-/** Each table's court: its floor runs back to a low barrier behind the robot, this wide either side. */
+/** Each pad's running track: its floor runs back to a low barrier behind the backboard, this wide either side. */
 export const COURT_BACK_X = ROBOT_X + 1.5
 export const COURT_HALF = 3.1
-/** Facing the table: east. (Yaw 0 faces +Z, south.) */
+/** Facing the treadmill's console: east. (Yaw 0 faces +Z, south.) */
 export const PAD_YAW = Math.PI / 2
 
 /** The square round pad `index`: its raised deck (walkable, and a wall while locked). */
@@ -86,12 +88,12 @@ export function padRect(index) {
   return { minX: PAD_X - r, maxX: PAD_X + r, minZ: cz - r, maxZ: cz + r }
 }
 
-// --- Paddle showroom ----------------------------------------------------------------
+// --- Ball shop ----------------------------------------------------------------------
 
 /**
- * The paddle showroom: an open-air yard west of the plaza with two display stages, the
- * first twelve paddles on the low front one and the next twelve on the higher back one,
- * and a big PADDLES sign behind. Both stages are low enough to walk straight onto.
+ * The ball shop: an open-air yard west of the plaza with two display stages, the
+ * first twelve balls on the low front one and the next twelve on the higher back one,
+ * and a big BALL SHOP sign behind. Both stages are low enough to walk straight onto.
  */
 export const SHOP = { minX: -48, maxX: -22, minZ: -26, maxZ: 12 }
 export const SHOP_STAGES = [
@@ -136,7 +138,7 @@ export const standRect = (stand) => ({
 
 /**
  * The egg row stands back on the left (south-west), the Sphinx at its end; the big
- * Volcano egg has a spot of its own, front right on the way to the serve zone.
+ * Volcano egg has a spot of its own, front right on the way to the kick zone.
  */
 export const EGG_STANDS = [
   { eggId: 'basic', x: -14, z: 25 },
@@ -144,6 +146,9 @@ export const EGG_STANDS = [
   { eggId: 'sunset', x: -30, z: 25 },
   { eggId: 'unicorn', x: -38, z: 25 },
   { eggId: 'volcano', x: 14, z: -14, big: true },
+  // Palm Beach's Beach Egg, the Volcano egg's twin across the plaza (hatches in Palm
+  // Beach only; in World 1 it stands locked, a taste of what's through the portal).
+  { eggId: 'beach', x: -14, z: -14, big: true },
 ]
 export const EGG_TRIGGER_RADIUS = 4.2
 
@@ -163,6 +168,13 @@ export const PORTALS = [{ id: 'world2', x: -28, z: -34, radius: 3.4 }]
 
 export const FREE_REWARD = { x: -12, z: 10, radius: 3 }
 
+/**
+ * Palm Beach's Secret Star (balance SECRET_STAR): tucked away behind the middle of the
+ * leaderboards at the back of the plaza, where the camera never looks unless you go
+ * round. Picked up within `radius`, in Palm Beach only.
+ */
+export const STAR = { x: -6, z: 35.2, y: 1.4, radius: 1.8 }
+
 // --- Collision ----------------------------------------------------------------------
 
 const box = (x, z, halfX, halfZ) => ({
@@ -174,14 +186,14 @@ const box = (x, z, halfX, halfZ) => ({
 
 /** Solid, never-changing obstacles. Locked pads add their own walls at runtime. */
 export const STATIC_COLLIDERS = [
-  // The showroom's sign.
+  // The ball shop's sign.
   { minX: SHOP_SIGN.x - 0.5, maxX: SHOP_SIGN.x + 0.5, minZ: SHOP_SIGN.minZ - 0.5, maxZ: SHOP_SIGN.maxZ + 0.5 },
   // Egg pedestals.
   ...EGG_STANDS.map((s) => box(s.x, s.z, s.big ? 2.1 : 1.6, s.big ? 2.1 : 1.6)),
   box(SPHINX_STAND.x, SPHINX_STAND.z, 3, 3),
   ...LEADERBOARDS.map((b) => box(b.x, b.z, 4.6, 0.5)),
   box(FREE_REWARD.x, FREE_REWARD.z, 1.4, 1.4),
-  // The ping pong tables and their ball robots, and the barrier across each court's back.
+  // The treadmills' console blocks, and the barrier across each running track's back.
   ...Array.from({ length: PAD_COUNT }, (_, i) => ({
     minX: TABLE_NEAR_X,
     maxX: ROBOT_X + 0.7,

@@ -11,8 +11,9 @@ import { GRADIENTS, u } from './style'
 
 /**
  * Top centre while your ball flies: a rainbow bar of the lane's stages with your marker
- * moving along it, "1,050 m" under it and the stage's name. All three are written
- * straight to the DOM from the frame loop (see hudLink), never through React.
+ * moving along it, "1,050 yd" under it and the stage's name. All three are written
+ * straight to the DOM from the frame loop (see hudLink), never through React - and the
+ * whole counter is contained, so those writes re-lay-out this box alone.
  */
 const RAINBOW_BAR = 'linear-gradient(90deg, #ff4a4a 0%, #ff9a1e 17%, #ffe23a 33%, #4be05a 50%, #2fd0ff 67%, #3a6bff 83%, #ff5fd2 100%)'
 const DISTANCE_GRADIENT = 'linear-gradient(180deg, #e0faff 0%, #7fe2ff 45%, #2f8ff2 100%)'
@@ -22,19 +23,23 @@ function DistanceCounter() {
   const ref = useCallback((el) => setRollHudElement(el), [])
   return (
     // Below the top-right buttons, so the bar never runs under them.
-    <div ref={ref} className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ top: u(96), width: u(1300), maxWidth: '86vw' }}>
+    <div ref={ref} className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ top: u(96), width: u(1300), maxWidth: '86vw', contain: 'layout style' }}>
       <div className="relative w-full" style={{ height: u(30) }}>
         <div className="absolute inset-0" style={{ border: `${u(5)} solid #111`, borderRadius: u(16), background: RAINBOW_BAR }} />
-        <div data-zone-marker className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: '0%' }}>
-          <Icon name="tire" size={u(64)} />
+        {/* The marker rides a track as wide as the bar, slid by a transform (a % of the
+            track's own width): moving it never needs a layout. */}
+        <div data-zone-marker className="absolute inset-0" style={{ willChange: 'transform' }}>
+          <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <Icon name="tire" size={u(64)} />
+          </div>
         </div>
       </div>
       <span className="pp-text" style={{ fontSize: u(100), lineHeight: 1, marginTop: u(14) }}>
         <span data-distance aria-hidden="true" className="pp-text-stroke" style={{ WebkitTextStrokeWidth: u(20) }}>
-          0 m
+          0 yd
         </span>
         <span data-distance className="pp-text-fill" style={{ color: '#ffffff' }}>
-          0 m
+          0 yd
         </span>
       </span>
       <span className="pp-text" style={{ fontSize: u(56), marginTop: u(6) }}>
@@ -72,7 +77,7 @@ function FlyingTrophies() {
 
 /**
  * Once the ball stops, as in the reference: "1,516 m!" with "+1,516 Wins" under it, and
- * a big tilted NEW RECORD! over them when it's your furthest serve yet.
+ * a big tilted NEW BEST! over them when it's your furthest kick yet.
  */
 function RollResult({ result }) {
   return (
@@ -83,7 +88,7 @@ function RollResult({ result }) {
         {result.best && (
           <div style={{ fontSize: u(120), transform: 'rotate(-8deg)', marginBottom: u(-10) }}>
             <StrokeText stroke={u(22)} gradient={GRADIENTS.priceShort}>
-              NEW RECORD!
+              NEW BEST!
             </StrokeText>
           </div>
         )}

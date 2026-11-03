@@ -153,72 +153,66 @@ function launching(t, time) {
 }
 
 /**
- * Where in the serve (0-1) the paddle meets the ball: the ball sets off at that moment
- * (roll/path.js, KICK_HIT). (Named for the template's kick, which this swing replaced.)
+ * Where in the kick (0-1) the foot meets the ball: the ball sets off at that moment
+ * (roll/path.js, KICK_HIT).
  */
 export const KICK_IMPACT = 0.52
 
 /**
- * A big forehand, `t` 0..1, with `impact` where the paddle meets the ball and `size`
- * how big a swing (1 for a serve, less for a rally): the paddle arm swings out and back
- * with the shoulders turned away, then whips round and through the ball with the body
- * turning into it, and follows through across the chest before settling. The other arm
- * points out for balance.
+ * A place kick, `t` 0..1 (the holder moves the body forward - kick.runUpAt - this is the
+ * pose within): a couple of steps in, the left foot planted beside the ball, the right leg
+ * wound back with the body leaning away, then swung hard through the ball - the knee
+ * snapping straight - and followed through high with the arms out for balance, before
+ * settling.
  */
-function forehand(t, impact, size, w) {
-  const wind = smooth(0, impact - 0.12, t) * (1 - smooth(impact - 0.12, impact, t))
-  const strike = smooth(impact - 0.12, impact, t) * (1 - smooth(impact + 0.12, 1, t))
-  const through = smooth(impact, impact + 0.18, t) * (1 - smooth(0.7, 1, t))
-  const plant = smooth(0, 0.3, t) * (1 - smooth(0.85, 1, t))
-  // The paddle arm: out to the side and back, then round and through.
-  add('ArmR1', 0.2 * size, 1.15 * OUT_R, -0.9 * size, wind * w)
-  add('ArmR2', -0.35, 0, 0, wind * w)
-  add('ArmR1', -0.55 * size, 1.05 * OUT_R, 0.7 * size, strike * w)
-  add('ArmR2', -0.15, 0, 0, strike * w)
-  add('ArmR1', -0.5 * size, 0.2 * OUT_R, 0.9 * size, through * w)
-  add('ArmR2', -0.9 * size, 0, 0, through * w)
-  // Shoulders: turned away, then into it.
-  add('Spine1', 0.05, 0, -0.35 * size, wind * w)
-  add('Spine1', -0.12 * size, 0, 0.35 * size, strike * w)
-  // The other arm out for balance.
-  add('ArmL1', -0.6 * size, 0.55 * OUT_L, 0, plant * w)
-  add('ArmL2', -0.4, 0, 0, plant * w)
-  // Knees bend into it.
-  add('LegL1', -0.18 * size, 0.05 * OUT_L, 0, plant * w)
-  add('LegL2', 0.36 * size, 0, 0, plant * w)
-  add('LegR1', 0.12 * size, 0.08 * OUT_R, 0, plant * w)
-  add('LegR2', 0.3 * size, 0, 0, plant * w)
-  pose.lift += -0.06 * size * plant * w
+function kickPose(t, w) {
+  const i = KICK_IMPACT
+  // The approach: arms and legs pumping for the first steps in.
+  const approach = smooth(0, 0.08, t) * (1 - smooth(i - 0.2, i - 0.1, t))
+  const cycle = Math.sin(t * 38)
+  add('LegL1', cycle * 0.5, 0, 0, approach * w)
+  add('LegL2', Math.max(0, -cycle) * 0.8, 0, 0, approach * w)
+  add('ArmL1', -cycle * 0.5, 0.1 * OUT_L, 0, approach * w)
+  add('ArmR1', cycle * 0.5, 0.1 * OUT_R, 0, approach * w)
+  add('ArmL2', -0.5, 0, 0, approach * w)
+  add('ArmR2', -0.5, 0, 0, approach * w)
+  add('Spine1', -0.15, 0, 0, approach * w)
+
+  // Wound back, then through, then the follow-through (the windows hand over to each other).
+  const wind = smooth(i - 0.26, i - 0.1, t) * (1 - smooth(i - 0.1, i - 0.02, t))
+  const strike = smooth(i - 0.1, i - 0.02, t) * (1 - smooth(i + 0.08, i + 0.26, t))
+  const through = smooth(i + 0.08, i + 0.26, t) * (1 - smooth(0.78, 1, t))
+  // The planted left foot, from the last step in until it's all over.
+  const plant = smooth(i - 0.22, i - 0.08, t) * (1 - smooth(0.82, 1, t))
+
+  // The kicking leg: back with the knee folded, then forward and straight, then high.
+  add('LegR1', 0.95, 0.06 * OUT_R, 0, wind * w)
+  add('LegR2', 1.9, 0, 0, wind * w)
+  add('LegR1', -1.25, 0.04 * OUT_R, 0, strike * w)
+  add('LegR2', 0.25, 0, 0, strike * w)
+  add('LegR1', -1.85, 0.1 * OUT_R, 0, through * w)
+  add('LegR2', 0.05, 0, 0, through * w)
+  // The standing leg: soaks it up.
+  add('LegL1', -0.2, 0.06 * OUT_L, 0, plant * w)
+  add('LegL2', 0.4, 0, 0, plant * w)
+  // The body: leaning back and away on the wind-up, folding forward over the ball.
+  add('Spine1', 0.18, 0, -0.3, wind * w)
+  add('Spine1', -0.3, 0, 0.3, strike * w)
+  add('Spine1', -0.12, 0, 0.2, through * w)
+  add('Neck1', 0.25, 0, 0, strike * w)
+  // The arms: the kicking side's back and the other's forward, out wide, then swapped
+  // over as the leg comes through.
+  add('ArmR1', 0.5, 0.85 * OUT_R, 0, wind * w)
+  add('ArmL1', -0.7, 0.8 * OUT_L, 0, wind * w)
+  add('ArmR1', 0.8, 0.6 * OUT_R, 0, strike * w)
+  add('ArmL1', -0.9, 0.7 * OUT_L, 0, strike * w)
+  add('ArmR1', 0.3, 1.0 * OUT_R, 0, through * w)
+  add('ArmL1', -0.5, 1.0 * OUT_L, 0, through * w)
+  add('ArmL2', -0.3, 0, 0, (wind + strike + through) * w)
+  add('ArmR2', -0.3, 0, 0, (wind + strike + through) * w)
+  pose.lift += -0.05 * plant * w
 }
 
-/** The serve: one big forehand through the tossed ball, over ROLL_LAUNCH. */
-function servePose(t, w) {
-  forehand(t, KICK_IMPACT, 1, w)
-}
-
-/**
- * Rallying at a training table, `h` 0..1 through each TRAIN_INTERVAL: a quick, smaller
- * forehand every cycle, meeting the ball at RALLY_IMPACT (pong.js times the ball to it).
- */
-export const RALLY_IMPACT = 0.3
-function rallyPose(h, w) {
-  forehand(h, RALLY_IMPACT, 0.75, w)
-}
-
-/** Up in the air for a jump smash: knees tucked up, the free arm thrown high. */
-function tuck(w) {
-  add('LegL1', -1.0, 0.1 * OUT_L, 0, w)
-  add('LegL2', 1.5, 0, 0, w)
-  add('LegR1', -0.55, 0.1 * OUT_R, 0, w)
-  add('LegR2', 1.2, 0, 0, w)
-  add('ArmL1', -1.2, 0.4 * OUT_L, 0, w)
-}
-
-/** Holding the paddle ready: forearm up in front, the paddle out ahead. */
-function grip(w) {
-  add('ArmR1', -0.35, 0.12 * OUT_R, 0.15, w)
-  add('ArmR2', -0.85, 0, 0, w)
-}
 
 /** In the air off a ramp: arms flung out like wings, legs kicking apart. */
 function flying(time, w) {
@@ -252,10 +246,10 @@ function cheering(time, w) {
 /**
  * @param {{ time?: number, speed?: number, maxSpeed?: number, grounded?: boolean,
  *   vy?: number, stride?: number, sliding?: boolean, launch?: number, stand?: number,
- *   air?: number, kick?: number, hit?: number, emote?: string|null }} motion
- *   `kick` (0-1) is the serve's swing and `leap` how high it has jumped for it (metres);
- *   `hit` (0-1, below 0 for none) the rally swing
- *   at a training table, each TRAIN_INTERVAL.
+ *   air?: number, kick?: number, run?: number, emote?: string|null }} motion
+ *   `kick` (0-1) is the kick's swing (below 0 or above 1 for none).
+ *   `run` (0-1) is how hard they're sprinting on the spot on a treadmill: legs and arms
+ *   pumping as if at that share of top speed, going nowhere. (`stride` is the phase.)
  *   `sliding` lies the body down on the board; `speed` is then the slide's speed.
  *   While sliding, `launch` (0-1) is the dive onto the board, `air` (0-1) how far into
  *   a jump's pose, and `stand` (0-1) getting up to celebrate at the end.
@@ -277,8 +271,7 @@ export function computePose(motion) {
     stand = 0,
     air = 0,
     kick = -1,
-    hit = -1,
-    leap = 0,
+    run = 0,
   } = motion
   for (const name of POSED_BONES) {
     const b = pose.bones[name]
@@ -297,26 +290,19 @@ export function computePose(motion) {
     }
     return pose
   }
-  // Serving (`kick` 0-1 through the swing, below 0 or above 1 for none): eased in and
+  // Kicking (`kick` 0-1 through the swing, below 0 or above 1 for none): eased in and
   // out over the stance.
   const kicking = kick >= 0 && kick <= 1
   const kickWeight = kicking ? smooth(0, 0.1, kick) * (1 - smooth(0.9, 1, kick)) : 0
   if (kicking) {
     stance(1 - kickWeight, time)
-    grip(1 - kickWeight)
-    servePose(kick, kickWeight)
-    // Off the ground for a jump smash: tucked up as high as the leap goes.
-    if (leap > 0) tuck(Math.min(1, leap / 0.8) * kickWeight)
-  } else if (hit >= 0 && grounded) {
-    // Rallying at a table: a swing every cycle, in the ready stance.
-    stance(1, time)
-    grip(0.6)
-    rallyPose(hit, 1)
+    kickPose(kick, kickWeight)
   } else if (grounded) {
-    const ratio = clamp01(speed / Math.max(maxSpeed, 0.001))
+    // Walking, or sprinting on the spot on a treadmill (`run`): the same stride, at the
+    // pace asked for.
+    const ratio = Math.max(clamp01(speed / Math.max(maxSpeed, 0.001)), clamp01(run) * 0.95)
     const still = 1 - smooth(0.05, 0.4, ratio)
     stance(still, time)
-    grip(still)
     if (ratio > 0.02) stride(phase, ratio)
   } else {
     airborne(vy)

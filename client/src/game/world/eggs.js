@@ -4,7 +4,8 @@ import { STYLE } from '../materials'
 
 /**
  * Egg stands: a blue-and-white pedestal ringed in light, plus the big Volcano Egg's
- * rocky plinth (with its lava pool and smoking vents) and the Sphinx showcase. Blocks and merged props,
+ * rocky plinth (with its lava pool and smoking vents), the big Beach Egg's sandy one and
+ * the Sphinx showcase. Blocks and merged props,
  * riding along in the world's existing draw calls; the eggs themselves float above in
  * EggDisplays.
  */
@@ -15,8 +16,33 @@ const RING = { basic: '#7fe2ff', meadow: '#5cff6a', sunset: '#ffb347', unicorn: 
 /** Height of an egg's centre above the ground. */
 export const eggHeight = (stand) => (stand.big ? 3.4 : 2.6)
 
+/**
+ * The Beach Egg's plinth (its twin across the plaza from the Volcano's): stepped sand
+ * round a ring of shallow water, a coral and a yellow starfish, seashells, and a little
+ * striped beach umbrella leaning over it. Every layer 4 cm or more proud of the last.
+ */
+function buildBeachStand(blocks, { x, z }) {
+  blocks.addOn(x, 0, z, 4.2, 0.6, 4.2, '#f2dca0')
+  blocks.addOn(x, 0.6, z, 3.6, 0.3, 3.6, '#3fc6d8', STYLE.WATER)
+  blocks.addOn(x, 0.9, z, 3, 0.3, 3, '#ead196')
+  // Starfish on the top sand: two crossed bars each, the second 4 cm over the first.
+  for (const [dx, dz, color] of [[-1.0, 1.0, '#ff6f61'], [1.05, -0.95, '#ffc93a']]) {
+    blocks.add(x + dx, 1.26, z + dz, 0.9, 0.12, 0.22, color, STYLE.SMOOTH, 0.3)
+    blocks.add(x + dx, 1.3, z + dz, 0.9, 0.12, 0.22, color, STYLE.SMOOTH, 0.3 + Math.PI / 2.5)
+  }
+  for (const [dx, dz] of [[1.05, 1.0], [-1.05, -1.0]]) blocks.addOn(x + dx, 1.2, z + dz, 0.32, 0.18, 0.26, '#fff0f4', STYLE.SMOOTH)
+  // The umbrella: a pole at one corner, clear of the egg, and a two-layer canopy.
+  blocks.addOn(x + 1.9, 0.6, z - 1.9, 0.1, 3.5, 0.1, '#ffffff', STYLE.SMOOTH)
+  blocks.add(x + 1.9, 4.16, z - 1.9, 1.6, 0.12, 1.6, '#16b8c4', STYLE.SMOOTH, 0.3)
+  blocks.add(x + 1.9, 4.32, z - 1.9, 1.1, 0.12, 1.1, '#ff6f61', STYLE.SMOOTH, 0.3 + Math.PI / 4)
+}
+
 export function buildEggStands(blocks) {
   for (const stand of EGG_STANDS) {
+    if (stand.eggId === 'beach') {
+      buildBeachStand(blocks, stand)
+      continue
+    }
     if (stand.big) {
       // Volcano Egg: a rocky stepped plinth round a pool of lava, with craggy rocks.
       blocks.addOn(stand.x, 0, stand.z, 4.2, 0.7, 4.2, '#3a3337')

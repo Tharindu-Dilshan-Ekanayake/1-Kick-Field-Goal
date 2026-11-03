@@ -28,6 +28,8 @@ const EGG_LOOKS = {
   sunset: { pattern: 2, glow: '#ffb347' },
   unicorn: { pattern: 3, glow: '#ffb0f0' },
   volcano: { pattern: 4, glow: '#ff6a14' },
+  // Palm Beach: sandy white, blue waves rolling round it, seashell spots.
+  beach: { pattern: 5, glow: '#5fe6ff', base: '#fff3dc', spot: '#2fb8e0', dark: '#ff8a7a' },
 }
 
 const vertexHead = /* glsl */ `
@@ -57,7 +59,7 @@ const fragmentHead = /* glsl */ `
   }
 `
 
-/** The five shell patterns, drawn on the unit sphere by latitude and longitude. */
+/** The six shell patterns, drawn on the unit sphere by latitude and longitude. */
 const PATTERN_GLSL = /* glsl */ `
   {
     vec3 p = normalize(vEggLocal);
@@ -102,12 +104,24 @@ const PATTERN_GLSL = /* glsl */ `
       float twinkle = step(0.92, eHash(star)) * (0.5 + 0.5 * sin(uETime * 4.0 + eHash(star + 3.1) * 6.0));
       col += vec3(twinkle * 0.9);
       glow = twinkle * 0.6;
-    } else {
+    } else if (d < 5.0) {
       // Demon: dark shell split by glowing lava cracks that pulse.
       float n = sin(lon * 5.0 + sin(p.y * 7.0) * 1.5) * sin(p.y * 9.0 + sin(lon * 3.0) * 2.0);
       float crack = 1.0 - smoothstep(0.0, 0.13, abs(n));
       col = mix(base, vEggSpot, crack);
       glow = crack * (0.65 + 0.35 * sin(uETime * 3.0));
+    } else {
+      // Beach: sandy shell, blue waves rolling round it with white foam on their crests,
+      // and coral seashell spots on the sand between them.
+      float w = p.y + 0.07 * sin(lon * 6.0 + uETime * 1.2);
+      float band = fract(w * 2.6 + 0.3);
+      float wave = smoothstep(0.42, 0.47, band) * (1.0 - smoothstep(0.72, 0.77, band));
+      float foam = (1.0 - smoothstep(0.0, 0.05, abs(band - 0.44))) * 0.9;
+      vec2 cell = vec2(lon / ETAU * 9.0, lat / 3.14159 * 7.0);
+      vec2 f = fract(cell) - 0.5;
+      float shell = (1.0 - smoothstep(0.12, 0.16, length(f * vec2(1.0, 1.4)))) * step(0.55, eHash(floor(cell))) * (1.0 - wave);
+      col = mix(mix(base, vEggSpot, wave), vec3(1.0), foam);
+      col = mix(col, vEggDark, shell);
     }
     // Lit a touch from above.
     col *= mix(0.86, 1.06, p.y * 0.5 + 0.5);
@@ -141,7 +155,7 @@ function eggMaterial() {
     // The lobby's clock, which already ticks every frame for the halos.
     shader.uniforms.uETime = glowTime
   }
-  material.customProgramCacheKey = () => 'egg-v1'
+  material.customProgramCacheKey = () => 'egg-v2'
   return material
 }
 
@@ -176,7 +190,8 @@ export function EggDisplays() {
     const c = new Color()
     EGG_STANDS.forEach((stand, i) => {
       const look = EGG_LOOKS[stand.eggId] || EGG_LOOKS.basic
-      const [base, iconDark, iconSpot] = EGG_COLORS[stand.eggId] || EGG_COLORS.basic
+      const [iconBase, iconDark, iconSpot] = EGG_COLORS[stand.eggId] || EGG_COLORS.basic
+      const base = look.base || iconBase
       const spotColor = look.spot || iconSpot
       const darkColor = look.dark || iconDark
       mesh.setColorAt(i, c.set(base))

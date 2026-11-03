@@ -7,19 +7,14 @@ import { clampToWalkable, groundHeightAt, PAD_YAW, padAt, STATIC_COLLIDERS } fro
 
 import { sfx } from '../audio/sfx'
 import { getGame } from '../store/game'
-import { getQuality } from '../store/quality'
-import { burst } from './fx/fxQueue'
 import ErrorBoundary from '../ui/ErrorBoundary'
 import FallbackAvatar from './FallbackAvatar'
 import PlayerAvatar from './PlayerAvatar'
-import { RALLY_IMPACT } from './playerPose'
 import { ROLL_LAUNCH } from '@shared/balance'
 import { createBallMesh, disposeBallMesh } from './ball'
-import { leapAt } from './pong'
-import { HELD_PADDLE_SIZE, HOLD_POSITION, HOLD_QUATERNION, RALLY_BALL_SIZE, rallyBall, rallyPhase } from './pong'
+import { RUN_CADENCE, runUpAt, TEE_AHEAD, TEE_BALL_SIZE } from './kick'
 import { roll } from './roll/rollControl'
 import { runtime } from './runtime'
-import { createTireModel } from './tire'
 import useKeyboard from './useKeyboard'
 
 export const PLAYER_HEIGHT = 1.8
@@ -45,13 +40,8 @@ const _q = new Quaternion()
 const _s = new Vector3()
 const _m = new Matrix4()
 
-/** Standing on the SERVE ZONE, your ball floats this far ahead and to the right, ready. */
-const READY_AHEAD = 0.85
-const READY_RIGHT = 0.5
-const READY_HEIGHT = 1.25
-/** Ball instances: the one waiting on the serve zone, and the one in a rally. */
+/** Standing on the KICK ZONE, your football rests on its tee TEE_AHEAD ahead, ready. */
 const WAITING = 0
-const RALLY = 1
 /** 0 -> 1 with a springy overshoot, for things popping into view. */
 const easeOutBack = (x) => {
   const t = Math.min(1, Math.max(0, x)) - 1
@@ -96,10 +86,9 @@ function pushOut(pos, rect) {
  * rectangular walls, which a circle-vs-rect push-out handles exactly. That saves the
  * ~2 MB Rapier WASM download and keeps the active rigid body count at zero.
  *
- * While your ball flies you stay on the SERVE ZONE (what the server checks), watching
- * it go; Roll.jsx draws it and moves the camera. At a training table you face the table
- * and rally with its ball robot, a swing every TRAIN_INTERVAL. On the serve zone your
- * ball floats in front of you, ready. Your paddle is always in your hand.
+ * While your ball flies you stay on the KICK ZONE (what the server checks), watching
+ * it go; Roll.jsx draws it and moves the camera. On a treadmill you face east and sprint
+ * on the spot. On the kick zone your football rests on its tee in front of you, ready.
  *
  * Reads and writes `runtime.player`; never touches React state per frame.
  *
@@ -108,24 +97,14 @@ function pushOut(pos, rect) {
 export function Player({ onAvatarReady }) {
   const groupRef = useRef(null)
   const visualRef = useRef(null)
-  const handRef = useRef(null)
   const ballsRef = useRef(null)
   const keys = useKeyboard()
   const velocity = useRef(new Vector3())
   const vy = useRef(0)
-  /** The waiting ball's pop-in (0-1) on the serve zone. */
+  /** The waiting ball's pop-in (0-1) on the kick zone. */
   const ready = useRef(0)
-  /** Where the rally was last frame (0-1): wrapping round is the paddle meeting the ball. */
-  const lastRally = useRef(1)
-  /** Your paddle, held in the hand (HOLD_*), and the balls: waiting, and in a rally. */
-  const paddle = useMemo(() => {
-    const model = createTireModel()
-    model.position.copy(HOLD_POSITION)
-    model.quaternion.copy(HOLD_QUATERNION)
-    model.scale.setScalar(HELD_PADDLE_SIZE)
-    return model
-  }, [])
-  const balls = useMemo(() => createBallMesh(2), [])
+  /** The ball waiting on its tee. */
+  const balls = useMemo(() => createBallMesh(1), [])
 
   /** Handed to the avatar so it can pose itself. A ref: written every frame. */
   const motionRef = useRef({
@@ -145,13 +124,7 @@ export function Player({ onAvatarReady }) {
     return () => runtime.shadowCasters.delete(caster)
   }, [shownAt])
 
-  useEffect(
-    () => () => {
-      paddle.dispose()
-      disposeBallMesh(balls)
-    },
-    [paddle, balls],
-  )
+  useEffect(() => () => disposeBallMesh(balls), [balls])
 
   useFrame((state, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05)
@@ -166,26 +139,22 @@ export function Player({ onAvatarReady }) {
     const visual = visualRef.current
     const time = state.clock.elapsedTime
     const equipped = getGame().profile.equippedTire
-    paddle.setTire(equipped)
     const balls = ballsRef.current
-    balls.count = 2
-    // The balls dressed as your paddle's ball: a new paddle, a new ball.
+    balls.count = 1
+    // Dressed as the ball you've equipped: a new ball, a new look.
     balls.setBall(WAITING, equipped)
-    balls.setBall(RALLY, equipped)
 
-    // --- Ready to serve: your ball floats in front of you on the SERVE ZONE ---------
+    // --- Ready to kick: your ball rests on its tee in front of you on the KICK ZONE ---
     const waiting = getGame().zone.rollZone && !player.frozen && !roll.active
-    // Pressing SERVE hands it to the serve at once (Roll.jsx tosses it), in the same spot.
+    // Pressing KICK hands it to the kick at once (Roll.jsx draws it), in the same spot:
+    // straight down the field, TEE_AHEAD ahead, lying on the grass along the kick.
     if (roll.active) ready.current = 0
     else ready.current = waiting ? Math.min(1, ready.current + delta * 4) : Math.max(0, ready.current - delta * 6)
-    const yaw = player.yaw
-    _ball.set(
-      pos.x + Math.sin(yaw) * READY_AHEAD - Math.cos(yaw) * READY_RIGHT,
-      pos.y + READY_HEIGHT + Math.sin(time * 3) * 0.08,
-      pos.z + Math.cos(yaw) * READY_AHEAD + Math.sin(yaw) * READY_RIGHT,
-    )
-    _s.setScalar(RALLY_BALL_SIZE * 1.3 * easeOutBack(ready.current))
+    _ball.set(pos.x, groundHeightAt(pos.x, pos.z - TEE_AHEAD) + TEE_BALL_SIZE, pos.z - TEE_AHEAD)
+    // A gentle pulse while it waits, to say "kick me".
+    _s.setScalar(TEE_BALL_SIZE * easeOutBack(ready.current) * (1 + 0.04 * Math.sin(time * 4)))
     balls.setMatrixAt(WAITING, _m.compose(_ball, _q.identity(), _s))
+    balls.instanceMatrix.needsUpdate = true
 
     // --- Input, relative to the camera ----------------------------------------
     _input.set(0, 0, 0)
@@ -263,7 +232,7 @@ export function Player({ onAvatarReady }) {
 
     // --- Facing -----------------------------------------------------------------
     const speed = Math.hypot(velocity.current.x, velocity.current.z)
-    // Standing still on an unlocked pad: rally at its table.
+    // Standing still on an unlocked treadmill: sprint on it, facing along its belt.
     const pad = padAt(pos.x, pos.z)
     const running = pad >= 0 && player.grounded && speed < 0.5 && !player.frozen && isPadUnlocked(getGame().profile, pad)
     if (running) player.yaw = PAD_YAW
@@ -283,58 +252,38 @@ export function Player({ onAvatarReady }) {
     }
     shownAt.copy(pos)
 
-    // --- Rallying at a training table -------------------------------------------
-    // The ball flies between your paddle and the table's robot, one hit per gain.
-    if (running) {
-      const u = rallyBall(time, pad, pos.x, pos.y, pos.z, _ball)
-      if (u < lastRally.current) {
-        // Tok! And a little spark off the paddle.
-        sfx.pong(true)
-        if (getQuality().particles) burst({ x: _ball.x, y: _ball.y, z: _ball.z, count: 6, speed: 3, palette: 'gold' })
-      }
-      lastRally.current = u
-      _s.setScalar(RALLY_BALL_SIZE)
-    } else {
-      _s.setScalar(0)
-    }
-    balls.setMatrixAt(RALLY, _m.compose(_ball, _q.identity(), _s))
-    balls.instanceMatrix.needsUpdate = true
-
     // --- Publish motion ---------------------------------------------------------
     player.speed = speed
     player.anim = !player.grounded ? 'jump' : running ? 'run' : speed > 0.5 ? 'walk' : 'idle'
 
-    const shownSpeed = running ? 0 : speed
-    motion.speed = shownSpeed
+    motion.speed = speed
     motion.grounded = player.grounded
     motion.vy = vy.current
-    // At a table: a swing every rally, timed to meet the ball (pong.rallyBall).
-    motion.hit = running ? (rallyPhase(time) + RALLY_IMPACT) % 1 : -1
-    // The serve's swing when you press SERVE: how far through it (below 0: not).
+    // On a treadmill: a full sprint on the spot (playerPose, `run`).
+    motion.run = running ? 1 : 0
+    // The kick's swing when you press KICK: how far through it (below 0: not).
     const sinceRoll = roll.active ? (performance.now() - roll.startedAt) / 1000 : -1
     motion.kick = sinceRoll >= 0 && sinceRoll < ROLL_LAUNCH ? sinceRoll / ROLL_LAUNCH : -1
-    // A jump smash on a well-timed serve: as high as the hit is good (pong.leapAt).
-    motion.leap = motion.kick >= 0 ? leapAt(roll.hit, motion.kick) : 0
-    if (visual) visual.position.y = motion.leap
-    // Steps quicken with speed: the stride phase runs faster rather than jumping.
-    motion.stride += delta * (5 + 6 * Math.min(1, shownSpeed / WALK_SPEED))
+    // The run-up: the kicker steps in to the ball and stays there watching it go (the
+    // logical position stays on the zone).
+    if (visual) visual.position.z = roll.active ? -runUpAt(motion.kick >= 0 ? motion.kick : 1) : 0
+    // Steps quicken with speed (the stride phase runs faster rather than jumping), and run
+    // at a sprint's cadence on a treadmill.
+    motion.stride += delta * (running ? RUN_CADENCE : 5 + 6 * Math.min(1, speed / WALK_SPEED))
   })
 
   return (
     <>
       <group ref={groupRef}>
         <group ref={visualRef}>
-          <ErrorBoundary fallback={<FallbackAvatar motionRef={motionRef} handRef={handRef} onReady={onAvatarReady} />}>
-            <Suspense fallback={<FallbackAvatar motionRef={motionRef} handRef={handRef} />}>
-              <PlayerAvatar onReady={onAvatarReady} targetHeight={PLAYER_HEIGHT} motionRef={motionRef} handRef={handRef} />
+          <ErrorBoundary fallback={<FallbackAvatar motionRef={motionRef} onReady={onAvatarReady} />}>
+            <Suspense fallback={<FallbackAvatar motionRef={motionRef} />}>
+              <PlayerAvatar onReady={onAvatarReady} targetHeight={PLAYER_HEIGHT} motionRef={motionRef} />
             </Suspense>
           </ErrorBoundary>
-          <group ref={handRef}>
-            <primitive object={paddle} />
-          </group>
         </group>
       </group>
-      {/* The balls are placed in world space. */}
+      {/* The ball is placed in world space. */}
       <primitive ref={ballsRef} object={balls} />
     </>
   )

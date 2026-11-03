@@ -12,12 +12,11 @@ import { petGeometry } from './petModels'
  * pet looks identical in the inventory and following you around. No image assets to
  * download, and nothing is rendered twice.
  *
- * Every portrait is rendered once while the loading screen is still up
- * (renderAllPetIcons, from GameScene): reading pixels back from the GPU makes the main
- * thread wait for it, a freeze nobody sees there but a hitch in the middle of play. They
- * are kept as ImageBitmaps that PetIcon draws straight onto a small canvas - no PNG to
- * encode or decode. Anything asked for later (after a lost WebGL context) goes through a
- * queue, one at a time, read back asynchronously.
+ * Every portrait is queued once the game is on screen (queueAllPetIcons, from
+ * GameScene) and made one a frame, its pixels read back asynchronously: a synchronous
+ * read-back makes the main thread wait for the GPU. They are kept as ImageBitmaps that
+ * PetIcon draws straight onto a small canvas - no PNG to encode or decode. A portrait the
+ * UI asks for before its turn (or after a lost WebGL context) joins the same queue.
  */
 
 const SIZE = 128
@@ -93,23 +92,22 @@ async function store(id) {
 export function attachIconRenderer(gl) {
   renderer = gl
   // Built here, at set-up, so the frame loop that renders portraits never allocates.
-  rig ||= buildRig()
+  if (!rig) {
+    rig = buildRig()
+    // Its shader compiled in the background now, so the first portrait can't stall a
+    // frame on it (with shadows on, the world's lit program isn't the same one).
+    if (!import.meta.env.DEV) gl.compileAsync?.(rig.scene, rig.camera).catch(() => null)
+  }
 }
 
 /**
- * Renders every pet's portrait now, behind the loading screen (GameScene calls it once
- * the shaders are ready). Each read-back waits for the GPU, which is fine here and only
- * here. A few milliseconds per pet on a real GPU.
+ * Queues every pet's portrait (GameScene calls it once the game is on screen): the frame
+ * loop then makes them one a frame, each read back asynchronously, so none of it waits
+ * for the GPU. Done straight away and synchronously behind the loading screen, these
+ * read-backs were ~0.75 s of a slow phone's start-up.
  */
-export function renderAllPetIcons() {
-  if (!renderer || !rig) return
-  for (const id of Object.keys(PETS)) {
-    if (bitmaps.has(id)) continue
-    draw(id)
-    renderer.readRenderTargetPixels(rig.target, 0, 0, SIZE, SIZE, rig.pixels)
-    // The bitmap is made off the main thread; the pixels are copied before the next pet.
-    store(id).then(notify, (err) => console.warn('[petIcons] portrait failed', id, err))
-  }
+export function queueAllPetIcons() {
+  for (const id of Object.keys(PETS)) request(id)
 }
 
 /** Re-renders the portraits' React components after the frame, not inside it. */

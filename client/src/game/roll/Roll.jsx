@@ -31,14 +31,12 @@ import { sharedMaterials, STYLE } from '../materials'
 import { runtime } from '../runtime'
 import { activeWorld, perWorld, showLobbySky, zones } from '../worldLook'
 import { createBallMesh, disposeBallMesh } from '../ball'
-import { KICK_IMPACT } from '../playerPose'
-import { BALL_SIZE, leapAt, RALLY_BALL_SIZE } from '../pong'
 import { tireGlow } from '../tire'
 import { writeDistance, writeSpeed, writeZone } from './hudLink'
 import FireBurst from '../fx/FireBurst'
 import Impact from './Impact'
 import Lane from './Lane'
-import { createRideState, floorY, meterAtZ, rideState, rideTurn, trackPoint, zAt } from './path'
+import { createRideState, meterAtZ, rideState, rideTurn, trackPoint } from './path'
 import RollFX from './RollFX'
 import { linkPrograms } from '../linkPrograms'
 import { advanceRoll, roll } from './rollControl'
@@ -49,11 +47,11 @@ import Weather from './Weather'
 
 const MAX_TROPHIES = 16
 const STREAKS = 36
-/** Trophies float this high over the rolling line. */
+/** Trophies float this high over the kick's line. */
 const TROPHY_HEIGHT = 3.4
 /** Other players' balls drawn at once, besides yours. */
 const MAX_GHOSTS = 7
-/** Each other player's ball keeps to its own line down the lane, so balls don't overlap. */
+/** Each other player's ball keeps to its own line down the field, so balls don't overlap. */
 const ghostLane = (sid) => {
   let h = 2166136261
   for (let i = 0; i < sid.length; i += 1) h = Math.imul(h ^ sid.charCodeAt(i), 16777619)
@@ -94,8 +92,8 @@ const TROPHY_POPUP = { iconUrl: TROPHY_ICON, scale: 1.2 }
 
 /**
  * Speed-line streaks, made once: alternately down the left and right of the view (well
- * clear of the tire and the distance counter), each a little thicker or longer than
- * the next, and every third tinted with your tire's glow.
+ * clear of the ball and the distance counter), each a little thicker or longer than
+ * the next, and every third tinted with your ball's glow.
  */
 const streakState = (() => {
   const r = mulberry32(5)
@@ -166,8 +164,12 @@ const zoneNameGradients = perWorld((zs) =>
     return `linear-gradient(180deg, ${a} 0%, ${b} 45%, ${c} 100%)`
   }),
 )
-/** Sideways, in metres, the camera starts for the kick (and swings back from). */
-const KICK_CAM_SIDE = 4.4
+/** Sideways, in yards, the camera starts for the kick (and swings back from): the kicking foot's side. */
+const KICK_CAM_SIDE = 3.4
+/** The kick camera's start: behind the ball, up, and the height it looks at. */
+const KICK_CAM_BEHIND = 4.2
+const KICK_CAM_HEIGHT = 2.1
+const KICK_LOOK_HEIGHT = 0.55
 const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
   return t * t * (3 - 2 * t)
@@ -184,7 +186,7 @@ function createTrophyGeometry() {
   return p.build()
 }
 
-/** Ride states for other players' tires: a fixed pool, handed out by session id. */
+/** Ride states for other players' balls: a fixed pool, handed out by session id. */
 const ghostPool = Array.from({ length: MAX_GHOSTS }, () => ({ ...createRideState(), sid: null, ride: null }))
 
 /** The pooled state replaying `ride` for player `sid`, or null if the pool is full. */
@@ -193,7 +195,7 @@ function ghostState(sid, ride) {
   for (const st of ghostPool) {
     if (st.sid === sid) {
       if (st.ride !== ride) {
-        // A new roll from the same player.
+        // A new kick from the same player.
         st.ride = ride
         ride.fromMeter = meterAtZ(ride.z)
         ride.startX = ride.x
@@ -210,7 +212,7 @@ function ghostState(sid, ride) {
   return free
 }
 
-/** Frees the pooled state of rolls that are over or whose player left. */
+/** Frees the pooled state of kicks that are over or whose player left. */
 function releaseGhosts() {
   for (const st of ghostPool) {
     if (st.sid !== null && runtime.ghostRolls.get(st.sid) !== st.ride) {
@@ -221,9 +223,9 @@ function releaseGhosts() {
 }
 
 /**
- * Squash and stretch for your ball, like a cartoon: flattened for a moment when it lands
- * off a ramp or bursts through a wall, then springing back with a wobble. `squash` is
- * the amount (0 = none); the tire spreads sideways as it flattens.
+ * Squash and stretch for your ball, like a cartoon: flattened for a moment when the foot
+ * meets it or it slams down, then springing back with a wobble. `squash` is the amount
+ * (0 = none); the ball spreads sideways as it flattens.
  */
 const _squash = new Matrix4()
 const _toCentre = new Matrix4()
@@ -236,8 +238,7 @@ function applySquash(m, at, squash) {
 }
 
 /**
- * How squashed your tire is now: a landing, a wall hit or the kick, springing back over
- * ~0.35 s.
+ * How squashed your ball is now: the kick or a landing, springing back over ~0.35 s.
  */
 function tireSquash(now) {
   const since = now - Math.max(roll.landedAt, roll.hitAt, roll.kickedAt)
@@ -247,45 +248,27 @@ function tireSquash(now) {
 }
 
 
-/** How high the ball tosses for a serve, and where: ahead and to the right of the server. */
-const TOSS_HEIGHT = 1.3
-const TOSS_AHEAD = 0.85
-const TOSS_RIGHT = 0.5
-
 /**
- * Writes ball instance `n` for ride state `st` of `ride` (yours, or a ghost's), in paddle
- * `id`'s colour. Before the hit it's the serve's toss beside the player; then it flies
- * off the paddle in a high arc down the lane and bounces to a stop (path.rideState),
- * spinning as it goes. Returns the next free instance.
+ * Writes ball instance `n` for ride state `st` (yours, or a ghost's), dressed as ball
+ * `id`. Before the kick it rests on its tee ahead of the kicker; then it flies off the
+ * foot in a high arc down the field and bounces to a stop (path.rideState), tumbling end
+ * over end as it goes. Returns the next free instance.
  */
-function placeBall(balls, n, st, ride, id, squash = 0) {
-  let size
-  if (st.phase === 'launch') {
-    // Up off the free hand and back down to the paddle as it swings (facing -z).
-    const toss = Math.sin(Math.PI * st.launch)
-    // Tossed higher for a jump smash, to meet the paddle up in the air.
-    const leap = leapAt(ride.hit, st.launch * KICK_IMPACT)
-    _p.set(ride.startX + TOSS_RIGHT, floorY(ride.fromMeter) + 1.25 + TOSS_HEIGHT * toss + leap, zAt(ride.fromMeter) - TOSS_AHEAD)
-    _turn.identity()
-    size = RALLY_BALL_SIZE * 1.3
-  } else {
-    _p.copy(st.position)
-    rideTurn(st, _turn)
-    // Swelling from the tossed ball to full size as it leaves the paddle: a power shot.
-    size = BALL_SIZE * Math.min(1, 0.2 + (st.meter - ride.fromMeter) / 5)
-  }
-  _m.compose(_p, _turn, _s.setScalar(size))
+function placeBall(balls, n, st, id, squash = 0) {
+  _p.copy(st.position)
+  rideTurn(st, _turn)
+  _m.compose(_p, _turn, _s.setScalar(st.size))
   applySquash(_m, _p, squash)
   balls.setMatrixAt(n, _m)
-  // Dressed as its paddle's ball; yours burns after a PERFECT hit.
+  // Yours burns after a PERFECT kick.
   balls.setBall(n, id, n === 0 && roll.hit === 'perfect')
   return n + 1
 }
 
 /**
- * Lazily loaded: the track, its walls and trophies, your rolling tire (and other
- * players' ghost tires) and the chase camera while it rolls. While nobody is rolling it
- * still streams the first stretch, which is the canyon you see from the lobby.
+ * Lazily loaded: the field and its trophies, your kicked ball (and other players' ghost
+ * balls) and the chase camera while it flies. While nobody is kicking it still streams
+ * the first stretch, which is the field you see from the lobby.
  */
 export default function Roll() {
   const camera = useThree((s) => s.camera)
@@ -349,7 +332,7 @@ export default function Roll() {
       .catch(() => null)
       .finally(() => {
         if (cancelled) return
-        // Linked now, in the lobby, not at the first serve's paddle hit (linkPrograms.js).
+        // Linked now, in the lobby, not at the first kick (linkPrograms.js).
         linkPrograms(gl)
         root.visible = true
       })
@@ -376,7 +359,7 @@ export default function Roll() {
     const settings = getQuality()
     const now = performance.now()
 
-    // --- The roll -----------------------------------------------------------------
+    // --- The kick -----------------------------------------------------------------
     let focus = 0
     let speed = 0
     if (roll.active) {
@@ -398,7 +381,7 @@ export default function Roll() {
       writeDistance(Math.max(0, roll.meter))
       const zi = zoneIndexAt(Math.max(0, roll.meter))
       if (zi !== zoneShown.current) {
-        // Into a new stage (not the one it starts in): confetti round the tire and a
+        // Into a new stage (not the one it starts in): confetti round the ball and a
         // cheerful jingle.
         if (zoneShown.current >= 0 && zi > zoneShown.current) {
           sfx.stageUp()
@@ -408,7 +391,7 @@ export default function Roll() {
         writeZone(zi, zones()[zi].name, zoneNameGradients()[zi])
       }
 
-      // The sound of the roll, swelling with its speed, gone once it stops.
+      // The sound of the flight, swelling with its speed, gone once it stops.
       // (Silent once it has slammed down: the boom and the hops take over.)
       if (roll.airborne && speed > 4) {
         sfx.windStart()
@@ -421,7 +404,7 @@ export default function Roll() {
         // On the roll's own clock, so the camera freezes with the ball in slow motion.
         const elapsed = (now - roll.startedAt - roll.lag) / 1000
         if (roll.phase === 'stopped' || roll.crashed) {
-          // Stopped: swing round to the side and in, onto the tire lying there.
+          // Stopped: swing round to the side and in, onto the ball lying there.
           const k = smoothstep(0, 1.4, elapsed - roll.duration + (roll.crashed ? 0.5 : 0))
           const angle = (Math.floor(roll.distance) % 2 === 0 ? 1 : -1) * 0.7 * k
           const dist = 12 - 3.5 * k
@@ -430,17 +413,17 @@ export default function Roll() {
           camBase.lerp(_cam, 1 - Math.exp(-4 * delta))
           _look.copy(p).y += 0.4
         } else {
-          // Chase camera: behind and above the tire, looking down the track. Locked to it
-          // along the lane (at hundreds of m/s any lag leaves it far behind);
+          // Chase camera: behind and above the ball, looking down the field. Locked to it
+          // along the field (at hundreds of yd/s any lag leaves it far behind);
           // eased sideways so the weaving stays smooth, and eased in from the lobby
-          // camera - close for the push, pulling back once it's off.
+          // camera - close for the kick, pulling back once it's off.
           //
-          // For the kick it starts close and to one side, looking at the player's foot
-          // and the tire, so you see it; then it swings in behind and pulls back as the
-          // tire goes.
+          // For the kick it starts low, close and to one side, looking at the player's
+          // kicking foot and the ball on its tee, so you see them meet; then it swings in
+          // behind and pulls back as the ball goes.
           const off = smoothstep(0.55, 1.5, elapsed)
-          const behind = 8 + 3.6 * off + Math.min(speed, 300) * 0.006
-          trackPoint(roll.meter - behind, 0, 4.6 + 0.8 * off + roll.air, _cam)
+          const behind = KICK_CAM_BEHIND + (11.6 - KICK_CAM_BEHIND) * off + Math.min(speed, 300) * 0.006
+          trackPoint(roll.meter - behind, 0, KICK_CAM_HEIGHT + (5.4 - KICK_CAM_HEIGHT) * off + roll.air, _cam)
           const easingIn = elapsed < 1.1
           const kIn = easingIn ? 1 - Math.exp(-8 * delta) : 1
           const kx = easingIn ? kIn : 1 - Math.exp(-5 * delta)
@@ -449,7 +432,7 @@ export default function Roll() {
             camBase.y + (_cam.y - camBase.y) * kIn,
             camBase.z + (_cam.z - camBase.z) * kIn,
           )
-          trackPoint(roll.meter - 0.6 + 16.6 * off, p.x * 0.85, 1.7 + 0.3 * off + roll.air * 0.75, _look)
+          trackPoint(roll.meter - 0.6 + 16.6 * off, p.x * 0.85, KICK_LOOK_HEIGHT + (2 - KICK_LOOK_HEIGHT) * off + roll.air * 0.75, _look)
         }
         // Shake: a rumble that grows with speed, and a jolt on landings, wall hits and a
         // PERFECT hit's blast-off.
@@ -502,10 +485,9 @@ export default function Roll() {
     const tires = tiresRef.current
     if (tires) {
       let n = 0
-      // Tossed up beside you, then hit; once it cracks on a gate it's only pieces
-      // (Walls.jsx).
+      // On its tee, then kicked.
       if (roll.active && !roll.crashed) {
-        n = placeBall(tires, n, roll, roll, roll.tireId, tireSquash(now))
+        n = placeBall(tires, n, roll, roll.tireId, tireSquash(now))
       }
       for (const [sid, ride] of runtime.ghostRolls) {
         const elapsed = (now - ride.startedAt) / 1000
@@ -517,7 +499,7 @@ export default function Roll() {
         if (!st) continue
         rideState(elapsed, ride, ghostLane(sid), st)
         if (st.crashed || camera.position.distanceTo(st.position) > settings.viewDistance) continue
-        n = placeBall(tires, n, st, ride, ride.tireId)
+        n = placeBall(tires, n, st, ride.tireId)
       }
       releaseGhosts()
       tires.count = n
@@ -526,7 +508,7 @@ export default function Roll() {
 
     // --- Trophies -----------------------------------------------------------------
     if (roll.active) {
-      // Tally the ones just rolled through. The Wins were granted with the roll; this is
+      // Tally the ones just kicked past. The Wins were granted with the roll; this is
       // the visual receipt. At speed you pass dozens a second, so they're summed into
       // one popup at most every TROPHY_POPUP_MS.
       const tally = trophyTally.current
@@ -569,7 +551,7 @@ export default function Roll() {
         lines.count = 0
       } else {
         if (streakTintedFor.current !== roll.startedAt) {
-          // Once a roll: the tinted ones take this tire's glow, softened towards white.
+          // Once a kick: the tinted ones take this ball's glow, softened towards white.
           streakTintedFor.current = roll.startedAt
           _tint.copy(tireGlow(roll.tireId)).lerp(WHITE, 0.35)
           for (let i = 0; i < STREAKS; i += 1) lines.setColorAt(i, streakState[i].tinted ? _tint : WHITE)

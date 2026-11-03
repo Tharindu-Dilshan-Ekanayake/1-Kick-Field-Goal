@@ -9,7 +9,7 @@ const BANNER_GRADIENT = 'linear-gradient(180deg, #fff6a8 0%, #ffd52a 45%, #ffa00
 const PANEL_GRADIENT = 'linear-gradient(180deg, #ffe45c 0%, #ffc21f 55%, #ff9a12 100%)'
 
 /**
- * The tutorial for brand-new players: train, roll, buy a tire - then it's gone for good.
+ * The tutorial for brand-new players: run, kick, buy a ball - then it's gone for good.
  * A small strip, "1/3" and the step with its progress ("(16/30)"), so the world stays in
  * view; the 3D arrows (TutorialArrows) show where to go.
  */
@@ -19,7 +19,7 @@ function TutorialBanner({ step }) {
   const onZone = useGame((s) => s.zone.rollZone)
   let text = current.text
   if (current.health) text += ` (${formatNumber(Math.min(health, current.health))}/${formatNumber(current.health)})`
-  if (current.event === 'roll' && onZone) text = 'Press SERVE!'
+  if (current.event === 'roll' && onZone) text = 'Press KICK!'
   return (
     <div
       className="flex items-center"

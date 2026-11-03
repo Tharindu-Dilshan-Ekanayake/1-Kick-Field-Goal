@@ -5,11 +5,11 @@ Then check the pacing with: node scripts/balance-sim.mjs
 
 Two things are set here, separately:
 - where each gate stands (what players see): stage i is FIRST_LENGTH + LENGTH_STEP * i
-  metres long, so the track stretches a little every stage;
+  yards long, so the field stretches a little every stage;
 - the Health each gate needs: about RATIO_START times the last at first, rising slowly
   towards RATIO_END. Health grows by about that much per rebirth late in the game, so a
   new stage keeps coming every few minutes instead of every twenty.
-How far a tire rolls follows from the two (logic.rollReach interpolates between gates).
+How far a ball flies follows from the two (logic.rollReach interpolates between gates).
 """
 import math
 import pathlib
@@ -22,19 +22,19 @@ RATIO_START = 1.9
 RATIO_STEP = 0.009
 # A gate's wall needs this much more than the Health that reaches it (WALL_MARGIN).
 MARGIN = 1.3
-# Wins: per metre in the first stage, and how they follow the stage's Health (as a
-# power of it): about the pace of tire prices.
+# Wins: per yard in the first stage, and how they follow the stage's Health (as a
+# power of it): about the pace of ball prices.
 W0 = 0.006
 WINS_POWER = 0.48
 
 stages = [
-    ('grassy', 'Grassy Meadow', 'grassy'), ('autumn', 'Autumn Forest', 'autumn'), ('desert', 'Desert Canyon', 'desert'),
-    ('beach', 'Sunny Beach', 'beach'), ('jungle', 'Jungle Ruins', 'jungle'), ('frozen', 'Frozen Peaks', 'frozen'),
-    ('cherry', 'Cherry Blossom', 'cherry'), ('candy', 'Candy Land', 'candy'), ('mushroom', 'Mushroom Valley', 'mushroom'),
-    ('volcano', 'Lava Volcano', 'volcano'), ('swamp', 'Lily Swamp', 'swamp'), ('crystal', 'Crystal Caves', 'crystal'),
-    ('ocean', 'Coral Reef', 'ocean'), ('neon', 'Neon City', 'neon'), ('sky', 'Cloud Kingdom', 'sky'),
-    ('rainbow', 'Rainbow Road', 'rainbow'), ('moon', 'Moon Base', 'moon'), ('aurora', 'Aurora Tundra', 'aurora'),
-    ('space', 'Outer Space', 'space'), ('cosmic', 'Cosmic Core', 'cosmic'),
+    ('grassy', 'Backyard', 'grassy'), ('autumn', 'High School', 'autumn'), ('desert', 'Cactus Desert', 'desert'),
+    ('beach', 'Palm Beach', 'beach'), ('jungle', 'Jungle Stadium', 'jungle'), ('frozen', 'Frozen Tundra', 'frozen'),
+    ('cherry', 'College', 'cherry'), ('candy', 'Candy Bowl', 'candy'), ('mushroom', 'Mushroom Bowl', 'mushroom'),
+    ('volcano', 'Volcano', 'volcano'), ('swamp', 'Swamp Stadium', 'swamp'), ('crystal', 'Crystal Dome', 'crystal'),
+    ('ocean', 'Coral Arena', 'ocean'), ('neon', 'Neon Stadium', 'neon'), ('sky', 'Pro Stadium', 'sky'),
+    ('rainbow', 'Rainbow Bowl', 'rainbow'), ('moon', 'The Moon', 'moon'), ('aurora', 'Aurora Arena', 'aurora'),
+    ('space', 'Championship', 'space'), ('cosmic', 'Hall of Fame', 'cosmic'),
     ('hills', 'Green Hills', 'grassy'), ('maple', 'Maple Woods', 'autumn'), ('dunes', 'Dune Sea', 'desert'),
     ('island', 'Palm Island', 'beach'), ('temple', 'Lost Temple', 'jungle'), ('glacier', 'Glacier Pass', 'frozen'),
     ('sakura', 'Sakura Garden', 'cherry'), ('sweets', 'Sweet Valley', 'candy'), ('fungi', 'Fungi Forest', 'mushroom'),
@@ -92,4 +92,4 @@ a = s.index('export const ZONES = [')
 b = s.index('\n]', a) + 2
 s = s[:a] + 'export const ZONES = [\n' + '\n'.join(lines) + s[b - 2:]
 p.write_text(s, encoding='utf-8')
-print(f'{len(stages)} stages, track {start} m, last wall {num(r2(MARGIN * reach))}')
+print(f'{len(stages)} stages, field {start} yd, last wall {num(r2(MARGIN * reach))}')

@@ -3,10 +3,13 @@ import { test } from 'node:test'
 
 import {
   AD_REWARDS,
+  EGGS,
   GEM_PRODUCTS,
   healthForLevel,
   levelCap,
   nextRebirthGift,
+  PADS,
+  PETS,
   rebirthGift,
   rebirthMultiplier,
   TIRES,
@@ -28,9 +31,12 @@ import {
   buyTire,
   createProfile,
   createSession,
+  hatchEgg,
   healthPacks,
+  isPadUnlocked,
   levelFor,
   normalizeProfile,
+  padGain,
   rebirthSkipPrice,
   rollOutcome,
   rollReach,
@@ -38,7 +44,7 @@ import {
   usePortal,
 } from '../../shared/logic.js'
 import { PlayerSession } from '../../shared/session.js'
-import { PAD_X, padCenterZ, PORTALS, ROLL_ZONE, SPAWN } from '../../shared/world.js'
+import { PAD_X, padCenterZ, PORTALS, ROLL_ZONE, SPAWN, STAR } from '../../shared/world.js'
 
 const onPad = (i) => ({ x: PAD_X, y: 0.5, z: padCenterZ(i) })
 const inRollZone = () => ({ x: 0, y: 0, z: (ROLL_ZONE.minZ + ROLL_ZONE.maxZ) / 2 })
@@ -62,7 +68,7 @@ test('numbers format like the HUD', () => {
     [0, 999, 1000, 1234, 7300, 14000, 2.5e6, 9999].map(formatNumber),
     ['0', '999', '1K', '1.2K', '7.3K', '14K', '2.5M', '9.9K'],
   )
-  assert.equal(formatDistance(1050.7), '1,050 m')
+  assert.equal(formatDistance(1050.7), '1,050 yd')
 })
 
 // --- Levels and rebirth ----------------------------------------------------------
@@ -144,7 +150,7 @@ test('skipping to a rebirth costs Wins', () => {
 
 // --- Rolling ---------------------------------------------------------------------
 
-test('nothing blocks a serve: it always flies its full reach', () => {
+test('nothing blocks a kick: it always flies its full reach', () => {
   for (const health of [0, ZONES[1].wall - 1, ZONES[1].wall, ZONES[20].wall * 3]) {
     const outcome = rollOutcome(health)
     assert.equal(outcome.blocked, -1)
@@ -157,7 +163,7 @@ test('Wins grow with distance', () => {
   let last = -1
   for (let m = 0; m <= 16000; m += 250) {
     const wins = baseRollWins(m)
-    assert.ok(wins >= last, `${m} m pays at least as much as ${m - 250} m`)
+    assert.ok(wins >= last, `${m} yd pays at least as much as ${m - 250} yd`)
     last = wins
   }
 })
@@ -180,27 +186,31 @@ test('rolls pay Wins without using Health; a zone prize pays only once', () => {
 })
 
 test('the timing meter decides how hard you hit: distance and Wins', () => {
-  const serve = (accuracy) => {
+  const kick = (accuracy) => {
     const p = createProfile('a', 'A')
     p.health = ZONES[3].wall
     p.stats.bestZone = ZONES.length - 1
     return applyRoll(p, 0, accuracy)
   }
-  const auto = serve(null)
-  const weak = serve(0.1)
-  const good = serve(0.5)
-  const great = serve(0.8)
-  const perfect = serve(1)
+  const auto = kick(null)
+  const weak = kick(0.1)
+  const good = kick(0.5)
+  const great = kick(0.8)
+  const perfect = kick(1)
   assert.equal(auto.hit, null)
   assert.deepEqual([weak.hit, good.hit, great.hit, perfect.hit], ['weak', 'good', 'great', 'perfect'])
-  // Further the closer to the middle; Auto Serve flies Power's distance exactly.
+  // Further the closer to the middle; Auto Kick flies Power's distance exactly.
   assert.equal(auto.distance, Math.round(rollReach(ZONES[3].wall) * 10) / 10)
   assert.ok(weak.distance < good.distance && good.distance < great.distance && great.distance < perfect.distance)
-  assert.ok(perfect.distance > auto.distance && weak.distance < auto.distance * 0.75)
-  // And the best hits pay extra Wins on top of their distance's.
-  assert.ok(perfect.wins > auto.wins * 1.5)
+  // Every grade clearly apart from the next: at least a fifth further each step up.
+  assert.ok(good.distance > weak.distance * 1.2 && great.distance > good.distance * 1.2 && perfect.distance > great.distance * 1.15)
+  assert.ok(perfect.distance > auto.distance * 1.35 && weak.distance < auto.distance * 0.65)
+  // Wins: the Power's worth times the grade's bonus, whatever extra yards the grade adds.
+  assert.equal(good.wins, auto.wins)
+  assert.ok(weak.wins < auto.wins && great.wins > auto.wins)
+  assert.ok(Math.abs(perfect.wins - auto.wins * 1.6) <= 1)
   // Out-of-range accuracy is clamped, not trusted.
-  assert.equal(serve(7).distance, perfect.distance)
+  assert.equal(kick(7).distance, perfect.distance)
 })
 
 test('the very first roll pays for the second tire, as the guide asks', () => {
@@ -418,10 +428,15 @@ test('World 2 has its own sixty stages at the same gates, paying more', () => {
   }
 })
 
-test('the portal opens at enough Wins, without spending them, and goes both ways', () => {
+test('the portal opens at enough rebirths and Wins, without spending them, and goes both ways', () => {
   const p = createProfile('a', 'A')
   assert.equal(usePortal(p).ok, false)
   assert.equal(p.world, 0)
+  p.wins = WORLD_PORTALS.world2.wins
+  assert.equal(usePortal(p).ok, false, 'Wins alone are not enough')
+  p.rebirths = WORLD_PORTALS.world2.rebirths
+  p.wins = WORLD_PORTALS.world2.wins - 1
+  assert.equal(usePortal(p).ok, false, 'rebirths alone are not enough')
   p.wins = WORLD_PORTALS.world2.wins
   assert.deepEqual(usePortal(p), { ok: true, world: 1, first: true })
   assert.equal(p.wins, WORLD_PORTALS.world2.wins, 'Wins kept')
@@ -455,9 +470,62 @@ test('stepping into the portal switches world and tells the client', () => {
   session.handle('portal', {}, 0)
   assert.equal(profile.world, 0, 'not enough Wins yet')
   profile.wins = WORLD_PORTALS.world2.wins
+  profile.rebirths = WORLD_PORTALS.world2.rebirths
   session.handle('portal', {}, 0)
   assert.equal(profile.world, 1)
   assert.deepEqual(events.find((e) => e.type === 'world').payload, { world: 1, first: true })
   session.handle('portal', {}, 0)
   assert.equal(profile.world, 0)
+})
+
+// --- Palm Beach ------------------------------------------------------------------
+
+test("Palm Beach's treadmills and Beach Egg work there only", () => {
+  const p = createProfile('a', 'A')
+  const surf = PADS.findIndex((pad) => pad.id === 'surf')
+  const tsunami = PADS.findIndex((pad) => pad.id === 'tsunami')
+  p.rebirths = 20
+  p.wins = 1e9
+  assert.equal(isPadUnlocked(p, surf), false, 'not in World 1, whatever your rebirths')
+  assert.equal(hatchEgg(p, 'beach', 1).ok, false)
+  assert.equal(p.wins, 1e9, 'nothing charged for an egg that cannot hatch here')
+  p.world2Unlocked = true
+  p.world = 1
+  assert.equal(isPadUnlocked(p, surf), true)
+  assert.equal(isPadUnlocked(p, tsunami), true)
+  p.rebirths = 9
+  assert.equal(isPadUnlocked(p, surf), false, 'and it still needs its rebirths')
+  assert.equal(isPadUnlocked(p, 0), true, "World 1's treadmills work there too")
+  const res = hatchEgg(p, 'beach', 1)
+  assert.equal(res.ok, true)
+  assert.ok(['seagull', 'dolphin', 'shark', 'kraken'].includes(res.pets[0].id))
+  // Better pets than the Volcano Egg - the next step up - and its rarest is the best of all.
+  const avg = (id) => EGGS[id].pets.reduce((sum, [pet, w]) => sum + PETS[pet].mult * w, 0) / 100
+  assert.ok(avg('beach') > avg('volcano') * 1.3)
+  const eggPets = Object.values(EGGS).flatMap((egg) => egg.pets.map(([pet]) => pet)).filter((pet) => pet !== 'kraken')
+  assert.ok(eggPets.every((pet) => PETS[pet].mult < PETS.kraken.mult))
+})
+
+test("Palm Beach's Secret Star: found once, there only, for x2 Power everywhere", () => {
+  const atStar = { x: STAR.x, y: 0, z: STAR.z }
+  const { session, profile, count } = makeSession(atStar)
+  session.handle('findStar', {}, 0)
+  assert.equal(count('star'), 0, 'not in World 1')
+  profile.world2Unlocked = true
+  profile.world = 1
+  const before = padGain(profile, 0, 0)
+  session.handle('findStar', {}, 0)
+  assert.equal(count('star'), 1)
+  assert.equal(padGain(profile, 0, 0), before * 2)
+  session.handle('findStar', {}, 0)
+  assert.equal(count('star'), 1, 'once only')
+  profile.world = 0
+  assert.equal(padGain(profile, 0, 0), before * 2, 'and it keeps working back home')
+  assert.equal(normalizeProfile(JSON.parse(JSON.stringify(profile)), 'a', 'A').secretStars.world2, true, 'saved')
+  // Far from it, nothing.
+  const far = makeSession({ x: 0, y: 0, z: 0 })
+  far.profile.world2Unlocked = true
+  far.profile.world = 1
+  far.session.handle('findStar', {}, 0)
+  assert.equal(far.count('star'), 0)
 })

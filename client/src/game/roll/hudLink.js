@@ -1,15 +1,26 @@
 /**
  * The roll's distance counter, zone name and zone progress bar are DOM elements written
  * from the frame loop. The overlay registers them here; the renderer writes the
- * distance (and moves your marker along the bar) at most UPDATE_HZ times a second and
- * only when the whole-metre value changes, and the zone name only when the tire crosses
- * into a new zone, so React never re-renders during a roll.
+ * distance (and slides your marker along the bar) at most UPDATE_HZ times a second and
+ * only when the whole-yard value changes, and the zone name only when the ball crosses
+ * into a new zone, so React never re-renders during a kick.
  */
 import { ZONES } from '@shared/balance'
 import { formatDistance } from '@shared/format'
 import { zoneIndexAt } from '@shared/logic'
 
 const UPDATE_MS = 1000 / 15
+
+/**
+ * Changes an element's text in place, by its text node's value: `textContent` swaps in a
+ * new text node, which takes the old one out of layout and puts a new one in - on text
+ * written many times a second (the distance, popups), that's layout work every time.
+ */
+export function setText(el, text) {
+  const node = el.firstChild
+  if (node && node.nodeType === Node.TEXT_NODE && !node.nextSibling) node.nodeValue = text
+  else el.textContent = text
+}
 
 /** Each graded hit's overlay (HitFlash.jsx), by grade id, played by restarting its CSS animation. */
 const hitEls = {}
@@ -54,8 +65,8 @@ export function writeDistance(meters, now = performance.now()) {
   shown = m
   lastWrite = now
   const text = formatDistance(m)
-  for (const span of distanceSpans) span.textContent = text
-  if (marker) marker.style.left = `${zoneBarPosition(m) * 100}%`
+  for (const span of distanceSpans) setText(span, text)
+  if (marker) marker.style.transform = `translateX(${zoneBarPosition(m) * 100}%)`
 }
 
 /**
@@ -95,6 +106,6 @@ let lastSpeedWrite = 0
 export function writeZone(index, name, gradient) {
   if (zoneSpans.length === 0 || name === shownZone) return
   shownZone = name
-  for (const span of zoneSpans) span.textContent = name
+  for (const span of zoneSpans) setText(span, name)
   if (zoneFill) zoneFill.style.backgroundImage = gradient
 }

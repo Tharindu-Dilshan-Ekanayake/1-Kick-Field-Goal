@@ -1,31 +1,12 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
-import {
-  BackSide,
-  BufferAttribute,
-  Color,
-  IcosahedronGeometry,
-  InstancedMesh,
-  Matrix4,
-  MeshBasicMaterial,
-  Quaternion,
-  Triangle,
-  Vector3,
-} from 'three'
-
-import { mulberry32 } from '@shared/rng'
+import { useRef } from 'react'
+import { BackSide } from 'three'
 
 import { useQuality } from '../store/quality'
-import { CLOUDS, LIGHTS } from './sceneStyle'
 import { skyUniforms } from './skyState'
 
 /** Unit dome, scaled to just inside the camera's far plane for the current preset. */
 const SKY_RADIUS = 1
-
-/** Centre of the cloud field: the middle of the track. */
-const CLOUD_CENTER = [0, 0, -80]
-/** Radians per second the whole cloud field turns about its centre. */
-const CLOUD_DRIFT = 0.004
 
 const skyVertexShader = /* glsl */ `
   varying vec3 vDirection;
@@ -36,31 +17,75 @@ const skyVertexShader = /* glsl */ `
   }
 `
 
+/**
+ * Game-day sky, all in one shader: the zenith-to-horizon gradient, a big soft glow round
+ * the low sun (and a bright core in its middle), a scatter of thin streaky high clouds lit
+ * warm on the sun's side, and - for the night stages - stars. No textures, no geometry
+ * beyond the dome, nothing done per frame on the CPU.
+ */
 const skyFragmentShader = /* glsl */ `
   uniform vec3 topColor;
   uniform vec3 horizonColor;
   uniform float exponent;
+  uniform vec3 sunDirection;
+  uniform vec3 sunColor;
+  uniform float glow;
+  uniform float clouds;
+  uniform float stars;
 
   varying vec3 vDirection;
 
+  float skyHash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+  float skyNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(skyHash(i), skyHash(i + vec2(1.0, 0.0)), u.x), mix(skyHash(i + vec2(0.0, 1.0)), skyHash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+
   void main() {
-    float h = normalize(vDirection).y;
+    vec3 dir = normalize(vDirection);
+    float h = dir.y;
     // Below the horizon stays horizon-coloured, matching the fog on distant ground.
     vec3 color = mix(horizonColor, topColor, pow(max(h, 0.0), exponent));
+
+    // The low sun: a wide warm haze, a tighter glow and a bright core.
+    float s = max(dot(dir, normalize(sunDirection)), 0.0);
+    color += sunColor * glow * (0.35 * pow(s, 6.0) + 0.45 * pow(s, 40.0) + 1.2 * pow(s, 900.0));
+
+    // Thin high clouds: long streaks across the sky, thinning towards the zenith and
+    // gone below the horizon, lit warm towards the sun.
+    if (clouds > 0.0 && h > 0.0) {
+      vec2 p = dir.xz / (h + 0.18);
+      float n = skyNoise(p * vec2(0.9, 5.0) + vec2(3.1, 7.7)) * 0.65 + skyNoise(p * vec2(2.3, 11.0)) * 0.35;
+      float streak = smoothstep(0.62 - 0.22 * clouds, 0.9, n) * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.55, 0.95, h));
+      vec3 lit = mix(vec3(1.0, 0.96, 0.92), sunColor, 0.35 + 0.65 * pow(s, 3.0));
+      color = mix(color, lit, streak * 0.7 * clouds);
+    }
+
+    // Stars on the night stages: a fixed scatter, brightest overhead.
+    if (stars > 0.0 && h > 0.0) {
+      vec3 cell = floor(dir * 260.0);
+      float star = step(0.9965, skyHash(cell.xz + cell.y * 17.0));
+      color += vec3(star * stars * smoothstep(0.05, 0.4, h));
+    }
+
     gl_FragColor = vec4(color, 1.0);
     #include <colorspace_fragment>
   }
 `
 
 /**
- * Vertical gradient dome. Follows the camera so the horizon always sits at eye level
- * and the dome can never be walked out of.
+ * The sky dome. Follows the camera so the horizon always sits at eye level and the dome
+ * can never be walked out of. Its colours are skyUniforms (worldLook.js sets the lobby's,
+ * the kick field each stage's).
  */
-function SkyDome() {
+export function Sky() {
   const ref = useRef(null)
   const camera = useThree((s) => s.camera)
   const radius = useQuality((s) => s.settings.viewDistance) * 0.9
-  const uniforms = skyUniforms
 
   useFrame(() => {
     ref.current?.position.copy(camera.position)
@@ -68,167 +93,9 @@ function SkyDome() {
 
   return (
     <mesh ref={ref} renderOrder={-1} frustumCulled={false} scale={radius}>
-      <sphereGeometry args={[SKY_RADIUS, 24, 12]} />
-      <shaderMaterial
-        side={BackSide}
-        depthWrite={false}
-        uniforms={uniforms}
-        vertexShader={skyVertexShader}
-        fragmentShader={skyFragmentShader}
-      />
+      <sphereGeometry args={[SKY_RADIUS, 32, 16]} />
+      <shaderMaterial side={BackSide} depthWrite={false} uniforms={skyUniforms} vertexShader={skyVertexShader} fragmentShader={skyFragmentShader} />
     </mesh>
-  )
-}
-
-/**
- * A faceted puff with its shading baked into vertex colours: white where a face points
- * up or towards the sun, blue-grey underneath.
- *
- * Baked rather than lit so the clouds stay bright white regardless of the scene lights,
- * and the flat per-face colour gives the low-poly look.
- */
-function createPuffGeometry() {
-  const geometry = new IcosahedronGeometry(1, 1)
-  const position = geometry.getAttribute('position')
-  const colors = new Float32Array(position.count * 3)
-
-  const top = new Color(CLOUDS.top)
-  const bottom = new Color(CLOUDS.bottom)
-  const sun = new Vector3(...LIGHTS.sunDirection).normalize()
-  const a = new Vector3()
-  const b = new Vector3()
-  const c = new Vector3()
-  const faceNormal = new Vector3()
-  const faceColor = new Color()
-
-  // IcosahedronGeometry is non-indexed: every 3 vertices are one face.
-  for (let i = 0; i < position.count; i += 3) {
-    a.fromBufferAttribute(position, i)
-    b.fromBufferAttribute(position, i + 1)
-    c.fromBufferAttribute(position, i + 2)
-    Triangle.getNormal(a, b, c, faceNormal)
-    // Every vertex lies on the unit sphere, so the vertex itself points outward.
-    if (faceNormal.dot(a) < 0) faceNormal.negate()
-
-    const up = faceNormal.y * 0.5 + 0.5
-    const lit = Math.max(faceNormal.dot(sun), 0) * 0.35
-    faceColor.copy(bottom).lerp(top, Math.min(1, up * 0.85 + lit))
-
-    for (let v = 0; v < 3; v += 1) {
-      colors[(i + v) * 3] = faceColor.r
-      colors[(i + v) * 3 + 1] = faceColor.g
-      colors[(i + v) * 3 + 2] = faceColor.b
-    }
-  }
-
-  geometry.setAttribute('color', new BufferAttribute(colors, 3))
-  return geometry
-}
-
-/**
- * Each cloud is a row of overlapping, slightly flattened puffs with one more on top.
- *
- * Kept fairly low and large: the follow camera looks slightly down, so only clouds
- * low in the sky ever reach the top of the screen. The lowest cloud bottom still sits
- * above the highest the camera can orbit.
- */
-function buildCloudLayout(count) {
-  const rand = mulberry32(7)
-  const clouds = []
-
-  for (let i = 0; i < count; i += 1) {
-    const size = 7 + rand() * 6
-    const puffCount = 3 + Math.floor(rand() * 3)
-    const puffs = []
-
-    for (let p = 0; p < puffCount; p += 1) {
-      // Bigger in the middle, tapering to the ends.
-      const along = (p - (puffCount - 1) / 2) * size * 0.9
-      const taper = 1 - Math.abs(along) / (size * puffCount * 0.6)
-      const s = size * (0.75 + rand() * 0.35) * taper
-      puffs.push({
-        position: [along, (rand() - 0.3) * size * 0.4, (rand() - 0.5) * size * 0.6],
-        scale: [s, s * 0.75, s * 0.85],
-      })
-    }
-    // The billow on top that makes it read as a cumulus rather than a sausage.
-    puffs.push({
-      position: [(rand() - 0.5) * size, size * 0.55, 0],
-      scale: [size * 0.8, size * 0.65, size * 0.7],
-    })
-
-    clouds.push({
-      position: [(rand() * 2 - 1) * 240, 50 + rand() * 18, (rand() * 2 - 1) * 280],
-      rotationY: rand() * Math.PI,
-      puffs,
-    })
-  }
-
-  return clouds
-}
-
-/**
- * Every puff of every cloud in one InstancedMesh: a single draw call for the whole
- * sky, where one mesh per puff cost ~100.
- */
-function Clouds() {
-  const count = useQuality((s) => s.settings.cloudCount)
-
-  const mesh = useMemo(() => {
-    const layout = buildCloudLayout(count)
-    const puffs = []
-    const cloudQuat = new Quaternion()
-    const yAxis = new Vector3(0, 1, 0)
-    for (const cloud of layout) {
-      cloudQuat.setFromAxisAngle(yAxis, cloud.rotationY)
-      for (const puff of cloud.puffs) {
-        const local = new Vector3(...puff.position).applyQuaternion(cloudQuat)
-        puffs.push({
-          position: local.add(new Vector3(...cloud.position)),
-          quaternion: cloudQuat.clone(),
-          scale: new Vector3(...puff.scale),
-        })
-      }
-    }
-
-    // fog off: the clouds sit past the fog's far distance and would vanish.
-    const instanced = new InstancedMesh(
-      createPuffGeometry(),
-      new MeshBasicMaterial({ vertexColors: true, fog: false }),
-      puffs.length,
-    )
-    const matrix = new Matrix4()
-    puffs.forEach((p, i) => instanced.setMatrixAt(i, matrix.compose(p.position, p.quaternion, p.scale)))
-    instanced.instanceMatrix.needsUpdate = true
-    instanced.computeBoundingSphere()
-    instanced.position.set(...CLOUD_CENTER)
-    return instanced
-  }, [count])
-
-  useEffect(
-    () => () => {
-      mesh.geometry.dispose()
-      mesh.material.dispose()
-      mesh.dispose()
-    },
-    [mesh],
-  )
-
-  const ref = useRef(null)
-  useFrame((_state, delta) => {
-    if (ref.current) ref.current.rotation.y += delta * CLOUD_DRIFT
-  })
-
-  return <primitive ref={ref} object={mesh} />
-}
-
-/** Gradient sky plus drifting low-poly clouds. */
-export function Sky() {
-  return (
-    <>
-      <SkyDome />
-      <Clouds />
-    </>
   )
 }
 

@@ -28,7 +28,9 @@ export function buildPortalFrame(blocks) {
       const x = portal.x + Math.cos(a) * r
       const y = PORTAL_CENTER_Y + Math.sin(a) * r
       const lit = ring[2] && i % 4 === 1
-      blocks.add(x, y, portal.z, 1.2, 1.2, 1.4, lit ? ring[2] : ring[i % 2], lit ? STYLE.GLOW : STYLE.STUDS, 0, 0, a)
+      // Neighbours overlap round the ring, so every other block is 5 cm thinner each side:
+      // their faces never share a plane.
+      blocks.add(x, y, portal.z, 1.2, 1.2, i % 2 ? 1.3 : 1.4, lit ? ring[2] : ring[i % 2], lit ? STYLE.GLOW : STYLE.STUDS, 0, 0, a)
     }
     blocks.addOn(portal.x, 0, portal.z, r * 2 + 1.5, 0.5, 2.4, base)
   }

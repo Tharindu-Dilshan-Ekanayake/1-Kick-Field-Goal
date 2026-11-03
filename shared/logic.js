@@ -27,6 +27,7 @@ import {
   ROLL_BASE,
   ROLL_H0,
   ROLL_RECOVERY,
+  SECRET_STAR,
   rollDuration,
   SHOP,
   TIRES,
@@ -93,6 +94,8 @@ export function createProfile(id, name) {
     /** The world you're in (index into WORLDS), and whether World 2's portal is open. */
     world: 0,
     world2Unlocked: false,
+    /** Secret Stars found, by world id ('world2': Palm Beach's). */
+    secretStars: {},
     lastPad: -1,
     lastSeen: 0,
     settings: { autoRebirth: false, autoRoll: false },
@@ -122,6 +125,7 @@ export function normalizeProfile(raw, id, name) {
   p.stats.bestZone = Math.min(ZONES.length - 1, Math.max(0, Math.floor(p.stats.bestZone) || 0))
   p.stats.bestZone2 = Math.min(ZONES.length - 1, Math.max(0, Math.floor(p.stats.bestZone2) || 0))
   p.world2Unlocked = raw.world2Unlocked === true
+  p.secretStars = { world2: raw.secretStars?.world2 === true }
   p.world = p.world2Unlocked && raw.world === 1 ? 1 : 0
   // Levels follow from Health; recompute rather than trust a stored one.
   p.level = levelFor(p.health, p.rebirths)
@@ -144,6 +148,8 @@ export const tireById = (id) => TIRES.find((t) => t.id === id) || TIRES[0]
 export function isPadUnlocked(profile, index) {
   const pad = PADS[index]
   if (!pad) return false
+  // A world's own treadmill runs in that world only.
+  if (pad.world !== undefined && (profile.world || 0) !== pad.world) return false
   if (pad.product) return Boolean(profile.passes[pad.product])
   return profile.rebirths >= pad.rebirths
 }
@@ -212,9 +218,12 @@ export function winsMultiplier(profile, now) {
   return (profile.passes.winsX2 ? 2 : 1) * (isBoostActive(profile, 'wins', now) ? 2 : 1)
 }
 
+/** Palm Beach's Secret Star, once found: x2 Power for good, in every world. */
+export const starMultiplier = (profile) => (profile.secretStars?.world2 ? SECRET_STAR.power : 1)
+
 /** Everything that multiplies a Health gain except the tire and where you earn it. */
 export function gainMultiplier(profile, now) {
-  return rebirthMultiplier(profile.rebirths) * petMultiplier(profile) * healthBoostMultiplier(profile, now)
+  return rebirthMultiplier(profile.rebirths) * petMultiplier(profile) * healthBoostMultiplier(profile, now) * starMultiplier(profile)
 }
 
 /** Health from one gain anywhere but a pad: your tire's power, multiplied. */
@@ -305,7 +314,7 @@ export function zoneIndexAt(meter) {
 }
 
 /**
- * Where a serve with `health` (Power) lands: its full reach - nothing on the lane stops
+ * Where a kick with `health` (Power) lands: its full reach - nothing on the field stops
  * it. `broken` is how many stages it flew into past the first (the name stayed from the
  * template's walls); `blocked` is always -1.
  */
@@ -316,7 +325,7 @@ export function rollOutcome(health, reachFactor = 1) {
   return { distance: reach, blocked: -1, broken, reach }
 }
 
-/** Metres of every trophy within `distance`. */
+/** Yards of every trophy within `distance`. */
 export function trophiesWithin(distance) {
   const out = []
   for (let m = TROPHY_FIRST; m <= distance; m += TROPHY_SPACING) out.push(m)
@@ -327,9 +336,9 @@ export function trophiesWithin(distance) {
 export const trophyValue = (meter, world = 0) => Math.max(1, Math.round(zonesOf(world)[zoneIndexAt(meter)].winsPerMeter * TROPHY_METERS))
 
 /**
- * Wins for a serve in `world` before multipliers: every metre flown, at its stage's rate
- * (further out pays more per metre), plus the trophies passed. (All worlds' stages start
- * at the same metres; only what they pay differs.)
+ * Wins for a kick in `world` before multipliers: every yard flown, at its stage's rate
+ * (further out pays more per yard), plus the trophies passed. (All worlds' stages start
+ * at the same yards; only what they pay differs.)
  */
 export function baseRollWins(distance, world = 0) {
   const zones = zonesOf(world)
@@ -348,12 +357,16 @@ export function baseRollWins(distance, world = 0) {
 export const rollWinsAt = (health, world = 0) => baseRollWins(rollOutcome(health).distance, world)
 
 /**
- * A serve down the track. Health is not consumed. Returns everything the client needs
+ * A kick down the field. Health is not consumed. Returns everything the client needs
  * to replay it locally: distance, duration, the wall that stopped it, the Wins earned
  * (trophy positions follow from the distance) and any zone reached for the first time.
- * `accuracy` is where the timing meter was stopped (0-1, see HIT_GRADES): a better hit
- * flies further (hitReach) and the best pay extra Wins. Without it (Auto Serve) the
- * serve is a plain x1 hit.
+ * `accuracy` is where the timing meter was stopped (0-1, see HIT_GRADES): its grade
+ * decides how far the ball flies (hitReach: half as far for a WEAK kick, half as far
+ * again for a PERFECT one) and multiplies the Wins (`bonus`). The Wins are what the
+ * kick's Power is worth - the yards a plain kick would fly - times that bonus, never
+ * the extra yards themselves: further out every yard pays more, so paying for them
+ * would multiply a PERFECT kick's Wins dozens of times over late in the game. Without
+ * the meter (Auto Kick) the kick is a plain x1 kick.
  */
 export function applyRoll(profile, now, accuracy = null) {
   const outcome = rollOutcome(profile.health, hitReach(accuracy))
@@ -361,7 +374,8 @@ export function applyRoll(profile, now, accuracy = null) {
   const grade = hitGrade(accuracy)
   const multiplier = winsMultiplier(profile, now) * (grade ? grade.bonus : 1)
   const world = profile.world
-  const wins = Math.max(1, Math.round(baseRollWins(distance, world) * multiplier))
+  const worth = Math.round(rollReach(profile.health) * 10) / 10
+  const wins = Math.max(1, Math.round(baseRollWins(worth, world) * multiplier))
   // First time into a zone: its discovery prize, paid once ever (once in each world).
   const zone = zoneIndexAt(distance)
   const bestKey = world === 1 ? 'bestZone2' : 'bestZone'
@@ -438,16 +452,18 @@ export function skipRebirth(profile) {
 // --- Worlds -------------------------------------------------------------------------
 
 /**
- * Steps through the world portal: from World 1 into World 2 (opening it for good the
- * first time you hold enough Wins - they aren't spent), or from World 2 back home.
+ * Steps through the world portal: from World 1 into Palm Beach (opening it for good the
+ * first time you have the rebirths and hold the Wins - they aren't spent), or from Palm
+ * Beach back home.
  */
 export function usePortal(profile) {
   if (profile.world === 1) {
     profile.world = 0
     return { ok: true, world: 0 }
   }
-  const need = WORLD_PORTALS.world2.wins
-  if (!profile.world2Unlocked && profile.wins < need) return { ok: false, error: `Need ${need} Wins`, need }
+  const { wins: need, rebirths } = WORLD_PORTALS.world2
+  if (!profile.world2Unlocked && profile.rebirths < rebirths) return { ok: false, error: `Need ${rebirths} Rebirths`, need, rebirths }
+  if (!profile.world2Unlocked && profile.wins < need) return { ok: false, error: `Need ${need} Wins`, need, rebirths }
   const first = !profile.world2Unlocked
   profile.world2Unlocked = true
   profile.world = 1
@@ -510,6 +526,8 @@ export function addPet(profile, petId) {
 export function hatchEgg(profile, eggId, count = 1, { paid = 'wins', rand = Math.random } = {}) {
   const egg = EGGS[eggId]
   if (!egg) return { ok: false, error: 'Unknown egg' }
+  // A world's own egg hatches in that world only (eggs from rewards included).
+  if (egg.world !== undefined && (profile.world || 0) !== egg.world) return { ok: false, error: 'Hatches in Palm Beach only!' }
   if (profile.pets.length + count > MAX_PET_INVENTORY) return { ok: false, error: 'Pet inventory full!' }
   if (paid === 'wins') {
     if (!egg.cost.wins) return { ok: false, error: 'This egg is premium only' }
@@ -745,6 +763,16 @@ export function advanceTutorial(profile, event) {
 }
 
 /** Awards a badge once. Returns the badge if newly awarded. */
+/**
+ * Finds Palm Beach's Secret Star (the caller checks the player is at it, in Palm Beach).
+ * Once only; false if it was already found.
+ */
+export function claimSecretStar(profile) {
+  if ((profile.world || 0) !== SECRET_STAR.world || profile.secretStars?.world2) return false
+  profile.secretStars = { ...profile.secretStars, world2: true }
+  return true
+}
+
 export function awardBadge(profile, id) {
   if (!BADGES[id] || profile.badges.includes(id)) return null
   profile.badges.push(id)

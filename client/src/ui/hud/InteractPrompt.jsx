@@ -25,6 +25,7 @@ function usePrompt() {
   const atSphinx = useGame((s) => s.zone.sphinx)
   const atPortal = useGame((s) => s.zone.portal)
   const wins = useGame((s) => s.profile.wins)
+  const rebirths = useGame((s) => s.profile.rebirths)
   const inWorld = useGame((s) => s.profile.world)
   const unlocked = useGame((s) => s.profile.world2Unlocked)
 
@@ -32,9 +33,11 @@ function usePrompt() {
   if (atPortal) {
     const world = WORLD_PORTALS[atPortal]
     if (inWorld === 1) return { title: WORLDS[0].name, action: 'Step out and back in to go home', run: null }
-    return unlocked || wins >= world.wins
-      ? { title: world.name, action: `x${WORLDS[1].wins} Wins on every serve!`, run: null }
-      : { title: world.name, action: `Needs ${formatNumber(world.wins)} Wins (you have ${formatNumber(wins)})`, run: null }
+    if (unlocked || (rebirths >= world.rebirths && wins >= world.wins)) {
+      return { title: world.name, action: `x${WORLDS[1].wins} Wins on every kick!`, run: null }
+    }
+    if (rebirths < world.rebirths) return { title: world.name, action: `Needs ${world.rebirths} Rebirths (you have ${rebirths})`, run: null }
+    return { title: world.name, action: `Needs ${formatNumber(world.wins)} Wins (you have ${formatNumber(wins)})`, run: null }
   }
 
   if (atSphinx) {
@@ -46,6 +49,9 @@ function usePrompt() {
     const title = `${pad.name} - ${formatNumber(pad.mult)}x Power`
     if (pad.product) {
       return { title, action: `Unlock - ${formatNumber(SHOP[pad.product].price)} Wins`, run: () => buy(pad.product) }
+    }
+    if (pad.world !== undefined && (inWorld || 0) !== pad.world) {
+      return { title, action: `Works in ${WORLDS[pad.world].name} only - go through the portal!`, run: null }
     }
     const word = pad.rebirths === 1 ? 'Rebirth' : 'Rebirths'
     return { title, action: `Locked: needs ${pad.rebirths} ${word}`, run: null }

@@ -84,11 +84,13 @@ export function TutorialArrows() {
     for (let d = 1.6 + offset; d < dist - 1 && count < MAX_CHEVRONS; d += SPACING) {
       const x = player.x + ux * d
       const z = player.z + uz * d
-      // Over the pads and showroom stages, not under them.
-      _p.set(x, groundHeightAt(x, z) + 0.06, z)
-      // Fade in near the player, shrink near the goal.
-      const scale = Math.min(1, (d - 1.2) / 1.5) * Math.min(1, (dist - d) / 2)
-      _s.setScalar(Math.max(0.01, scale))
+      // Over the pads and ball-shop stages, not under them, and well clear of everything
+      // lying on the floor (field lines and decals 0.03-0.04 up, the treadmills' rails 0.2).
+      _p.set(x, groundHeightAt(x, z) + 0.15, z)
+      // Fade in near the player, shrink near the goal - in plan only, so their height
+      // above the floor never changes.
+      const scale = Math.max(0.01, Math.min(1, (d - 1.2) / 1.5) * Math.min(1, (dist - d) / 2))
+      _s.set(scale, 1, scale)
       instanced.setMatrixAt(count, _m.compose(_p, _q, _s))
       count += 1
     }
