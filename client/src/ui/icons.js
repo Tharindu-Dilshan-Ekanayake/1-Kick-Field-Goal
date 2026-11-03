@@ -313,6 +313,8 @@ export const EGG_COLORS = {
   sunset: ['#ffc07a', '#ff6a3d', '#ffe2b8'],
   unicorn: ['#f6eaff', '#d3b4ff', '#ffd1f0'],
   volcano: ['#5a3a30', '#2a1814', '#ff6a14'],
+  // Sandy shell with blue waves, like the 3D Beach Egg (EggDisplays).
+  beach: ['#fff3dc', '#2fb8e0', '#bff4ff'],
 }
 
 const urlCache = new Map()

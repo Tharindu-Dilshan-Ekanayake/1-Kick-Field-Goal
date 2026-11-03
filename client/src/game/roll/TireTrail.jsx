@@ -280,6 +280,8 @@ export function TireTrail() {
   // Compiled now, while the field loads, rather than on the first kick (each mesh as
   // itself: the discs' and sparkles' programs are the instanced ones).
   useEffect(() => {
+    // (Not in dev: StrictMode's remount disposes materials mid-compile - ShaderWarmup.)
+    if (import.meta.env.DEV) return
     for (const mesh of [assets.ribbon, assets.orbs, assets.sparkles]) gl.compileAsync?.(mesh, camera, scene)?.catch(() => null)
   }, [gl, camera, scene, assets])
 

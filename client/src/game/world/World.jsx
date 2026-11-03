@@ -73,7 +73,8 @@ export function World() {
         made = list
         const probe = new Group()
         for (const sign of list) probe.add(new Mesh(sign.geometry, sign.material))
-        await gl.compileAsync(probe, camera, scene).catch(() => null)
+        // (Not in dev: StrictMode's remount disposes materials mid-compile - ShaderWarmup.)
+        if (!import.meta.env.DEV) await gl.compileAsync(probe, camera, scene).catch(() => null)
         if (!cancelled) setSigns(list)
       })
     return () => {

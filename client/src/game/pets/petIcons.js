@@ -96,7 +96,7 @@ export function attachIconRenderer(gl) {
     rig = buildRig()
     // Its shader compiled in the background now, so the first portrait can't stall a
     // frame on it (with shadows on, the world's lit program isn't the same one).
-    gl.compileAsync?.(rig.scene, rig.camera).catch(() => null)
+    if (!import.meta.env.DEV) gl.compileAsync?.(rig.scene, rig.camera).catch(() => null)
   }
 }
 
