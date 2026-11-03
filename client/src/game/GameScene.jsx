@@ -13,7 +13,7 @@ import FollowCamera from './FollowCamera'
 import GainFX from './fx/GainFX'
 import WorldLabels from './labels/WorldLabels'
 import { prepareAudio } from '../audio/sfx'
-import { renderAllPetIcons } from './pets/petIcons'
+import { queueAllPetIcons } from './pets/petIcons'
 import Pets, { RewardCrab, SphinxShowcase } from './pets/Pets'
 import RemoteAvatars from './remote/RemoteAvatars'
 import RemotePlayers from './remote/RemotePlayers'
@@ -22,6 +22,7 @@ import Leaderboards from './world/Leaderboards'
 import TireShop from './world/TireShop'
 import EggDisplays from './world/EggDisplays'
 import Portal from './world/Portal'
+import SecretStar from './world/SecretStar'
 import TutorialArrows from './world/TutorialArrows'
 import Lighting from './Lighting'
 import PerfProbe from './PerfProbe'
@@ -84,15 +85,15 @@ function ViewDistance({ far }) {
 
 /**
  * The camera's vertical field of view for a screen `aspect` wide: 60 degrees on a
- * landscape screen; wider on one held upright, so the lane, the tables and the paddles
+ * landscape screen; wider on one held upright, so the field, the treadmills and the balls
  * still fit across a phone in portrait instead of being cropped to a narrow slit.
  */
 const fovForAspect = (aspect) => (aspect >= 1 ? 60 : Math.min(84, 60 / Math.sqrt(Math.max(0.3, aspect))))
 
 /**
  * Keeps the field of view right for the screen's shape as the phone turns. Left alone
- * while you serve (Roll.jsx animates the lens then, from this as its base), and put
- * right again once the serve is over.
+ * while you kick (Roll.jsx animates the lens then, from this as its base), and put
+ * right again once the kick is over.
  */
 function AspectFov() {
   const get = useThree((s) => s.get)
@@ -139,11 +140,6 @@ export function GameScene({ onReady }) {
   const readySent = useRef(false)
 
   const handleWarmedUp = useCallback(() => {
-    // Every pet portrait, now, behind the loading screen: rendering one later reads
-    // pixels back from the GPU in the middle of play, a visible hitch (petIcons.js).
-    renderAllPetIcons()
-    // The audio engine too: built on the first tap instead, it froze that tap.
-    prepareAudio()
     setWarmedUp(true)
     setWarmedRebuild(useQuality.getState().rebuild)
   }, [])
@@ -162,6 +158,14 @@ export function GameScene({ onReady }) {
     performance.mark('pp:ready')
     game.loadingEnd()
     onReady?.()
+    // Nothing on screen needs these yet, so they wait until the game is up: the pet
+    // portraits (made one a frame, read back asynchronously) and, at the first idle
+    // moment, the audio engine - built on the first tap instead it froze that tap, and a
+    // tap that beats it there still builds it (sfx.unlock). Before, both ran behind the
+    // loading screen: ~0.9 s of a slow phone's start-up.
+    queueAllPetIcons()
+    if ('requestIdleCallback' in window) requestIdleCallback(prepareAudio, { timeout: 1500 })
+    else setTimeout(prepareAudio, 200)
   }, [warmedUp, firstFrame, game, onReady])
 
   // A lost context (GPU reset, too many tabs, backgrounded on mobile) is recovered by
@@ -248,6 +252,7 @@ export function GameScene({ onReady }) {
         <WorldLabels />
         <TireShop />
         <EggDisplays />
+        <SecretStar />
         <Portal />
         <Leaderboards />
         <TutorialArrows />

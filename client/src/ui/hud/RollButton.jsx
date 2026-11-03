@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { HIT_GRADES, hitGrade, METER_PERIOD, TUTORIAL } from '@shared/balance'
+import { HIT_GRADES, hitGrade, hitReach, METER_PERIOD, TUTORIAL } from '@shared/balance'
 
 import { sfx } from '../../audio/sfx'
 import { actions } from '../../net/actions'
@@ -15,12 +15,12 @@ import { GRADIENTS, u } from './style'
  * needle first crosses the middle METER_PERIOD / 4 after the meter starts.
  */
 const PRESS_COOLDOWN_MS = 150
-/** With Auto Serve on, the next serve goes this long after you're back on the zone. */
+/** With Auto Kick on, the next kick goes this long after you're back on the zone. */
 const AUTO_DELAY_MS = 700
 
 /**
  * Where the needle is (0-1 across the bar) `ms` after the meter started from `start` (a
- * phase, 0-1, picked at random each serve): a pendulum, lingering at the ends and
+ * phase, 0-1, picked at random each kick): a pendulum, lingering at the ends and
  * fastest through the middle, so the PERFECT moment is a short one.
  */
 const needleAt = (ms, start) => 0.5 - 0.5 * Math.cos((ms / 1000 / METER_PERIOD + start) * Math.PI * 2)
@@ -39,10 +39,10 @@ const BAND_COLORS = {
 const GRADE_COLORS = { perfect: '#ffd21f', great: '#7dff4a', good: '#fff3a0', weak: '#ff6a5a' }
 
 /**
- * The big green SERVE! button, shown while standing on the SERVE ZONE. Press it (or E /
+ * The big green KICK! button, shown while standing on the KICK ZONE. Press it (or E /
  * Enter) and a timing meter swings under your ball: press again to hit. The nearer the
- * middle you stop it, the more the serve pays (HIT_GRADES). With the Auto Serve pass, a
- * toggle under it serves for you every time you're back, without the meter.
+ * middle you stop it, the more the kick pays (HIT_GRADES). With the Auto Kick pass, a
+ * toggle under it kicks for you every time you're back, without the meter.
  *
  * The needle is moved straight on the DOM every animation frame; React only hears about
  * the meter starting and stopping.
@@ -51,12 +51,12 @@ export function RollButton() {
   const visible = useGame((s) => s.zone.rollZone && !s.roll && !s.rollResult && !s.panel)
   const ownsAuto = useGame((s) => Boolean(s.profile.passes.autoRoll))
   const autoOn = useGame((s) => Boolean(s.profile.passes.autoRoll && s.profile.settings.autoRoll))
-  // The bouncing arrow over it is for the tutorial's serve step only.
+  // The bouncing arrow over it is for the tutorial's kick step only.
   const pointAt = useGame((s) => TUTORIAL[s.profile.tutorialStep]?.event === 'roll')
   const lastPress = useRef(-Infinity)
   /** performance.now() the meter started swinging, or 0 while it's put away. */
   const [aimingSince, setAimingSince] = useState(0)
-  /** Where in its swing the needle starts this serve (0-1): random, so no rhythm works every time. */
+  /** Where in its swing the needle starts this kick (0-1): random, so no rhythm works every time. */
   const [aimStart, setAimStart] = useState(0)
   const needleRef = useRef(null)
   const percentRef = useRef(null)
@@ -83,7 +83,7 @@ export function RollButton() {
     actions.roll()
   }, [])
 
-  // Off the zone (or into a serve) the meter is put away.
+  // Off the zone (or into a kick) the meter is put away.
   const [wasVisible, setWasVisible] = useState(visible)
   if (visible !== wasVisible) {
     setWasVisible(visible)
@@ -100,7 +100,7 @@ export function RollButton() {
     return () => window.removeEventListener('keydown', onKey)
   }, [visible, press])
 
-  // Auto Serve: serve again as soon as you're back on the zone.
+  // Auto Kick: kick again as soon as you're back on the zone.
   useEffect(() => {
     if (!visible || !autoOn) return undefined
     const id = setTimeout(autoServe, AUTO_DELAY_MS)
@@ -118,7 +118,8 @@ export function RollButton() {
       // text (StrokeText), the outline and the fill.
       const accuracy = accuracyAt(pos)
       const grade = hitGrade(accuracy)
-      const text = `${grade.label.replace(/[!.]+$/, '')} ${Math.round(accuracy * 100)}%`
+      // The grade and how far it would send the ball: "PERFECT x1.5 DISTANCE".
+      const text = `${grade.label.replace(/[!.]+$/, '')} x${hitReach(accuracy).toFixed(1)} DISTANCE`
       for (const layer of percentRef.current?.querySelectorAll('.pp-text-stroke, .pp-text-fill') ?? []) layer.textContent = text
       const fill = percentRef.current?.querySelector('.pp-text-fill')
       if (fill) fill.style.color = GRADE_COLORS[grade.id]
@@ -129,14 +130,14 @@ export function RollButton() {
   }, [aimingSince, aimStart])
 
   if (!visible) return null
-  const label = aimingSince ? 'HIT!' : 'Serve!'
+  const label = 'KICK!'
   return (
     <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center" style={{ bottom: u(300) }}>
       {pointAt && !aimingSince && <Icon name="arrowDown" size={u(80)} className="pp-bounce" style={{ marginBottom: u(8) }} />}
       {aimingSince > 0 && (
         <div className="flex flex-col items-center" style={{ marginBottom: u(18) }}>
-          <span ref={percentRef} style={{ fontSize: u(64), color: '#ffd21f' }}>
-            <StrokeText stroke={u(12)}>0%</StrokeText>
+          <span ref={percentRef} className="whitespace-nowrap" style={{ fontSize: u(54), color: '#ffd21f' }}>
+            <StrokeText stroke={u(11)}>WEAK KICK x0.5 DISTANCE</StrokeText>
           </span>
           <div
             className="relative overflow-visible"
@@ -188,13 +189,13 @@ export function RollButton() {
         <ChunkyButton
           gradient={autoOn ? GRADIENTS.goldButton : GRADIENTS.greyButton}
           onClick={() => actions.setSetting('autoRoll', !autoOn)}
-          title="Auto Serve"
+          title="Auto Kick"
           radius={10}
           border={4}
           style={{ height: u(56), padding: `0 ${u(20)}`, marginTop: u(12) }}
         >
           <span style={{ fontSize: u(32) }}>
-            <StrokeText stroke={u(7)}>Auto Serve: {autoOn ? 'ON' : 'OFF'}</StrokeText>
+            <StrokeText stroke={u(7)}>Auto Kick: {autoOn ? 'ON' : 'OFF'}</StrokeText>
           </span>
         </ChunkyButton>
       )}

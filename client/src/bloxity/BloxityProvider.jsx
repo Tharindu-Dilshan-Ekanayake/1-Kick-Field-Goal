@@ -199,16 +199,19 @@ export function BloxityProvider({ gameSlug, children }) {
   }, [])
 
   // Loading-screen + room helpers, exposed so gameplay code doesn't reach for
-  // `window.Legion` directly.
-  const game = useMemo(
-    () => ({
-      loadingStep: (label) =>
-        safeCall((sdkRef.current || getSDK())?.game?.loadingStep, label),
-      loadingEnd: () => safeCall((sdkRef.current || getSDK())?.game?.loadingEnd),
-      updateRoom: (room) => safeCall((sdkRef.current || getSDK())?.game?.updateRoom, room),
-    }),
-    [],
-  )
+  // `window.Legion` directly. Called bound to `sdk.game`, like every other SDK call:
+  // a method that uses `this` would fail called loose.
+  const game = useMemo(() => {
+    const call = (method, ...args) => {
+      const target = (sdkRef.current || getSDK())?.game
+      return safeCall(target?.[method]?.bind(target), ...args)
+    }
+    return {
+      loadingStep: (label) => call('loadingStep', label),
+      loadingEnd: () => call('loadingEnd'),
+      updateRoom: (room) => call('updateRoom', room),
+    }
+  }, [])
 
   const value = useMemo(
     () => ({

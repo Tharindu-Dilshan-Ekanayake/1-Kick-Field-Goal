@@ -4,15 +4,14 @@ import { ROLL_LAUNCH } from '@shared/balance'
 import { SLOPE_ANGLE, TRACK_START_Z } from '@shared/world'
 
 import { KICK_IMPACT } from '../playerPose'
-import { BALL_SIZE, leapAt } from '../pong'
+import { BALL_SIZE, swellSize, TEE_AHEAD, TEE_BALL_SIZE } from '../kick'
 
 /**
- * Geometry of the serve lane: one long, straight rainbow lane across an open field,
- * running north from the plaza's edge, dead level (SLOPE_ANGLE is 0; the maths still
- * allows a slope).
+ * Geometry of the kick: one long, straight football field running north from the
+ * plaza's edge, dead level (SLOPE_ANGLE is 0; the maths still allows a slope).
  *
- * Track metre `m` is measured along the track from the start line (the plaza's north
- * edge). Before the start (m < 0) the ground is the plaza. Everything here is pure
+ * Track metre `m` (a yard, to the player) is measured along the field from the start line
+ * (the plaza's north edge). Before the start (m < 0) the ground is the plaza. Everything here is pure
  * maths and allocation-free, so the frame loop can call it freely.
  */
 
@@ -63,39 +62,39 @@ export function slopeBoxPlacement(m, x, h) {
 /** Metres a world z is along the track (negative in the plaza). */
 export const meterAtZ = (z) => (z < TRACK_START_Z ? (TRACK_START_Z - z) / COS : TRACK_START_Z - z)
 
-// --- A serve ------------------------------------------------------------------------
+// --- A kick -------------------------------------------------------------------------
 
-/** Radius of a served ball in the world (pong.BALL_SIZE; named for the template's tire). */
+/** Radius of a kicked ball in flight (kick.BALL_SIZE; named for the template's tire). */
 export const TIRE_SIZE = BALL_SIZE
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x))
 
 /**
- * The ball waits this far ahead of you when you hit it, and the flight sets off from
- * there.
+ * The ball rests on its tee this far ahead of you when you kick it, and the flight sets
+ * off from there.
  */
-export const PUSH_AHEAD = 2.3
+export const PUSH_AHEAD = TEE_AHEAD
 /**
- * Seconds into a serve that the paddle meets the ball: the player tosses it and swings
- * (playerPose.servePose, over ROLL_LAUNCH), and it stays in the toss until then. The
- * serve's total time is the authority's, so the flight runs from here.
+ * Seconds into a kick that the foot meets the ball: the player runs up and swings
+ * (playerPose.kickPose, over ROLL_LAUNCH), and the ball sits on its tee until then. The
+ * kick's total time is the authority's, so the flight runs from here.
  */
 export const KICK_HIT = ROLL_LAUNCH * KICK_IMPACT
 
 /**
- * The flight takes LAND_T of the serve's time after the hit; the rest is the ball
- * hopping in its crater and settling into it.
+ * The flight takes LAND_T of the kick's time after the foot meets it; the rest is the ball
+ * bouncing on the turf and settling in the grass.
  */
 const LAND_T = 0.84
-/** Hops in the crater after it slams down, over the first SETTLE of the time left. */
+/** Bounces on the turf after it thumps down, over the first SETTLE of the time left. */
 const BOUNCES = 2
 const SETTLE = 0.65
-/** How deep the ball sits in its crater once it has settled. */
-const SUNK = 0.3
+/** How far the ball nestles into the grass once it has settled. */
+const SUNK = 0.04
 
 /**
  * How far along its distance (0-1) the ball is `t` of the way through its flight: off
- * the paddle fast, slowing as it goes, and still moving as it slams down at the end.
+ * the foot fast, slowing as it goes, and still moving as it slams down at the end.
  */
 const progress = (t) => {
   const x = clamp01(t)
@@ -103,20 +102,24 @@ const progress = (t) => {
 }
 
 /**
- * Seconds into a serve of `duration` (launch included) at which the ball has flown `f`
+ * Seconds into a kick of `duration` (launch included) at which the ball has flown `f`
  * (0-1) of its distance: 0.5 is the top of its arc, 1 the moment it slams down.
  */
-export const serveTimeAt = (f, duration) => KICK_HIT + LAND_T * (1.5 - Math.sqrt(2.25 - 2 * clamp01(f))) * Math.max(0.1, duration - KICK_HIT)
+export const kickTimeAt = (f, duration) => KICK_HIT + LAND_T * (1.5 - Math.sqrt(2.25 - 2 * clamp01(f))) * Math.max(0.1, duration - KICK_HIT)
 
 /**
- * The flight: one high arc over the whole distance, slamming down exactly where the
- * authority says it stops - cracking the lane open (Impact.jsx) - then a couple of hops
- * in the crater and it settles into it. The arc's peak grows with the distance (a short
- * serve is a lob, a long one soars), capped so the lane stays in view below the ball.
+ * The flight: one high arc over the whole distance, thumping down exactly where the
+ * authority says it stops - a splash of turf (Impact.jsx) - then a couple of bounces on
+ * the grass and it settles there. The arc's peak grows with the distance (a short
+ * kick is a lob, a long one soars) and with how well it was kicked (KICK_ARC: a WEAK
+ * kick skims low, a PERFECT one soars high), capped so the field stays in view below it.
  */
-/** Height of the ball's bottom off the lane as it leaves the paddle (centre at chest height). */
-const LAUNCH_AIR = 0.35
-export const flightPeak = (distance) => Math.min(32, 4 + 0.6 * Math.sqrt(Math.max(0, distance)))
+/** Height of the ball's bottom off the ground as it leaves the foot: it starts on the grass. */
+const LAUNCH_AIR = 0
+/** How high each meter grade's kick flies, against a plain kick's arc (Auto Kick: 1). */
+const KICK_ARC = { weak: 0.5, good: 0.85, great: 1.15, perfect: 1.45 }
+export const flightPeak = (distance, hit = null) =>
+  Math.min(44, (4 + 0.6 * Math.sqrt(Math.max(0, distance))) * (KICK_ARC[hit] ?? 1))
 
 /** A fresh state for rideState to write into. */
 export const createRideState = () => ({
@@ -124,8 +127,10 @@ export const createRideState = () => ({
   launch: 0,
   meter: 0,
   speed: 0,
-  /** Height of the ball's bottom off the lane. */
+  /** Height of the ball's bottom off the field. */
   air: 0,
+  /** The ball's radius now: TEE_BALL_SIZE on the tee, swelling to BALL_SIZE as it flies. */
+  size: TEE_BALL_SIZE,
   /** True while the ball is in its arc (until it first lands). */
   airborne: false,
   /** 0 in the air; 1 once it has slammed down, then one more for every hop after. */
@@ -143,14 +148,15 @@ export const createRideState = () => ({
 })
 
 /**
- * Everything about a served ball `elapsed` seconds into a serve - yours, or another
+ * Everything about a kicked ball `elapsed` seconds into a kick - yours, or another
  * player's replayed from the same numbers, so both move identically. `ride` is
  * `{ fromMeter, startX, distance, duration }` (duration includes the launch); `lane` is
  * a sideways offset so balls don't overlap. Writes into `out` (see createRideState):
- *   phase    'launch' (tossed, the paddle swinging) | 'ride' | 'stopped'
+ *   phase    'launch' (on its tee, the kicker running up) | 'ride' | 'stopped'
  *   launch   0-1 through the launch
- *   meter    metres along the lane; speed in m/s along it
- *   air      height off the lane; airborne until it first lands
+ *   meter    yards along the field; speed in yd/s along it
+ *   air      height of its bottom off the field; airborne until it first lands
+ *   size     its radius now
  *   position the ball's centre
  */
 export function rideState(elapsed, ride, lane, out) {
@@ -166,23 +172,20 @@ export function rideState(elapsed, ride, lane, out) {
   if (elapsed < KICK_HIT) {
     out.phase = 'launch'
     out.launch = clamp01(elapsed / KICK_HIT)
-    // Up with the player's jump smash, so the camera rises with them.
-    air = LAUNCH_AIR + leapAt(ride.hit, out.launch * KICK_IMPACT)
+    air = LAUNCH_AIR
   } else {
     const t = (elapsed - KICK_HIT) / flightTime
     out.launch = 1
     out.phase = t >= 1 ? 'stopped' : 'ride'
-    const peak = flightPeak(end - start)
+    const peak = flightPeak(end - start, ride.hit)
     if (t < LAND_T) {
       const f = progress(t / LAND_T)
       meter = start + (end - start) * f
       speed = ((end - start) * (1.5 - (t / LAND_T))) / (LAND_T * flightTime)
-      // Off the paddle from as high as the jump smash took it.
-      const lift = LAUNCH_AIR + leapAt(ride.hit, KICK_IMPACT)
-      air = lift * (1 - f) + peak * 4 * f * (1 - f)
+      air = LAUNCH_AIR * (1 - f) + peak * 4 * f * (1 - f)
       out.airborne = true
     } else {
-      // Down in its crater: BOUNCES hops, each lower, then it settles into the hole.
+      // Down on the turf: BOUNCES hops, each lower, then it settles in the grass.
       meter = end
       const u = (t - LAND_T) / (1 - LAND_T) / SETTLE
       if (u < 1) {
@@ -203,9 +206,11 @@ export function rideState(elapsed, ride, lane, out) {
   out.lean = 0
   out.topple = 0
   out.yaw = 0
+  // Tumbling end over end as it goes (a football's long axis runs along the kick).
   out.spin = -(meter - start) / TIRE_SIZE
   out.x = x
-  trackPoint(meter, x, TIRE_SIZE + air, out.position)
+  out.size = swellSize((meter - start) / 5)
+  trackPoint(meter, x, out.size + air, out.position)
   return out
 }
 
@@ -216,7 +221,7 @@ const _qa = new Quaternion()
 const _qb = new Quaternion()
 const _qc = new Quaternion()
 
-/** The ball's turn for ride state `st`: its spin about its sideways axis. */
+/** The ball's turn for ride state `st`: its tumble about its sideways axis. */
 export function rideTurn(st, out) {
   // Turn about the vertical (Y), lean about the direction of travel (Z), then the spin
   // about X.

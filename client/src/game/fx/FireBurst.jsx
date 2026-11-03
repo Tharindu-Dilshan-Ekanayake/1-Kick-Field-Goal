@@ -57,6 +57,18 @@ const KINDS = {
     spread: 3.6,
     size: 1.7,
   },
+  turf: {
+    // A football thumping onto grass: a small, low puff of pale grass dust and flecks of
+    // green and soil - a landing on a pitch, not a smash through the ground.
+    ramp: colors(['#ffffff', '#f2f6e8', '#e2ead2', '#cfdbbb', '#bccaa6', '#aebc98']),
+    sparks: colors(['#3ad456', '#2fbf47', '#9ae07a', '#6b4426']),
+    flash: new Color('#f6fff0'),
+    flames: 0.4,
+    sparkShare: 0.8,
+    speed: 0.26,
+    spread: 2.2,
+    size: 1,
+  },
   good: {
     ramp: colors(['#ffffff', '#fff6c8', '#ffe27a', '#ffd21f', '#ffb21e', '#ffffff']),
     sparks: colors(['#ffffff', '#fff6a3', '#ffd21f', '#ff9ee0']),

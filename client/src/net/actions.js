@@ -18,8 +18,8 @@ export function send(type, payload) {
 
 export const actions = {
   /**
-   * Serves your ball; only counts standing on the SERVE ZONE (the SERVE! button sends
-   * it). `accuracy` (0-1) is where the timing meter stopped; leave it out for Auto Serve.
+   * Kicks your ball; only counts standing on the KICK ZONE (the KICK! button sends
+   * it). `accuracy` (0-1) is where the timing meter stopped; leave it out for Auto Kick.
    */
   roll: (accuracy) => send('roll', Number.isFinite(accuracy) ? { accuracy } : undefined),
   enterPad: (pad) => send('enterPad', { pad }),
@@ -42,6 +42,8 @@ export const actions = {
   claimFreeReward: () => send('claimFreeReward'),
   setSetting: (key, value) => send('setting', { key, value }),
   portal: () => send('portal'),
+  /** Picks up Palm Beach's Secret Star (the authority checks you're at it). */
+  findStar: () => send('findStar'),
   /** Buys a shop item with Wins; see shop.js. */
   purchase: (productId) => send('purchase', { productId }),
   /** A rewarded ad Boxity says was watched; the server verifies the token. */

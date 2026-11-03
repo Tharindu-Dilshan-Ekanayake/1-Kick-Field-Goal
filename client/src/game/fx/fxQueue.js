@@ -39,9 +39,9 @@ export function drainBursts(handle) {
 let pendingFire = null
 
 /**
- * Starts a burst at (x, y, z): off the paddle as it meets the ball - `kind` 'perfect' (a
+ * Starts a burst at (x, y, z): off the boot as it meets the ball - `kind` 'perfect' (a
  * column of fire), 'great' (an electric-blue blast) or 'good' (a spray of sparkles) - or
- * 'dust' billowing out of the ball's crater.
+ * 'dust' billowing up, or 'turf': the small puff of grass dust where the ball lands.
  */
 export function fireBurst(x, y, z, kind = 'perfect') {
   pendingFire = { x, y, z, kind }

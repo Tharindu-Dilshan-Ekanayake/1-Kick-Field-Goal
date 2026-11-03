@@ -26,7 +26,7 @@ import TopCenter from './TopCenter'
  */
 /**
  * The speed tunnel: white streaks rushing outwards and a soft haze round the screen's
- * edges, the middle left clear - the sides blur past as the tire flies. A plain DOM
+ * edges, the middle left clear - the sides blur past as the ball flies. A plain DOM
  * layer under the rest of the HUD (no post-processing, so it's on every preset); the
  * roll writes its strength straight to it (hudLink.writeSpeed), never through React.
  */
@@ -42,7 +42,7 @@ function SpeedTunnel() {
 
 export function HUD() {
   const panelOpen = useGame((s) => s.panel !== null)
-  // While your tire rolls the side menus clear out, as in the reference.
+  // While your ball flies the side menus clear out, as in the reference.
   const rolling = useGame((s) => Boolean(s.roll || s.rollResult))
   return (
     <div className="pp-font pointer-events-none absolute inset-0 z-20 select-none">

@@ -1,5 +1,5 @@
 import { isPadUnlocked } from '@shared/logic'
-import { eggStandNear, FREE_REWARD, inRollZone, PAD_COUNT, padAt, padRect, portalAt, SPHINX_STAND, standAt } from '@shared/world'
+import { eggStandNear, FREE_REWARD, inRollZone, PAD_COUNT, padAt, padRect, portalAt, SPHINX_STAND, standAt, STAR } from '@shared/world'
 
 import { sfx } from '../audio/sfx'
 import { actions } from '../net/actions'
@@ -29,13 +29,13 @@ function syncPads(profile) {
   for (let i = 0; i < PAD_COUNT; i += 1) {
     const unlocked = isPadUnlocked(profile, i)
     if (!unlocked) walls.push(padRect(i))
-    updateWorldLabel(`pad-${i}`, padLabelSpec(i, unlocked))
+    updateWorldLabel(`pad-${i}`, padLabelSpec(i, unlocked, profile.world || 0))
   }
   runtime.dynamicColliders = walls
 }
 
 /** What syncPads depends on, so it only runs when that changes. */
-const padKey = (profile) => `${profile.rebirths}:${profile.passes.padVeryOp ? 1 : 0}${profile.passes.padBest ? 1 : 0}`
+const padKey = (profile) => `${profile.rebirths}:${profile.world || 0}:${profile.passes.padVeryOp ? 1 : 0}${profile.passes.padBest ? 1 : 0}`
 
 /**
  * The 10 Hz bridge between the frame-rate world and the UI: works out which zone the
@@ -58,6 +58,7 @@ export function startGameTicker() {
     syncPads(state.profile)
   })
 
+  let starAskedAt = -Infinity
   const tick = () => {
     const game = getGame()
     const p = runtime.player.position
@@ -73,6 +74,15 @@ export function startGameTicker() {
       portal: portalAt(p.x, p.z)?.id ?? null,
       freeReward: Math.hypot(p.x - FREE_REWARD.x, p.z - FREE_REWARD.z) < FREE_REWARD.radius,
     }
+    // Palm Beach's Secret Star: walking into it picks it up (asked at most once a second).
+    const { profile } = game
+    if (profile.world === 1 && !profile.secretStars?.world2 && Math.hypot(p.x - STAR.x, p.z - STAR.z) < STAR.radius) {
+      const now = performance.now()
+      if (now - starAskedAt > 1000) {
+        starAskedAt = now
+        actions.findStar()
+      }
+    }
     if (!sameZone(zone, game.zone)) {
       if (zone.portal && zone.portal !== game.zone.portal) actions.portal()
       game.setZone(zone)
@@ -81,7 +91,10 @@ export function startGameTicker() {
       if (zone.pad >= 0 && isPadUnlocked(game.profile, zone.pad)) {
         actions.enterPad(zone.pad)
         sfx.treadmillEnter()
-      } else if (lastPad >= 0) actions.leavePad()
+      } else {
+        sfx.treadmillStop()
+        if (lastPad >= 0) actions.leavePad()
+      }
       lastPad = zone.pad
     }
   }

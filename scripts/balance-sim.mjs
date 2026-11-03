@@ -20,6 +20,7 @@ import {
   applyTrain,
   buyShopItem,
   buyTire,
+  claimSecretStar,
   createProfile,
   deletePet,
   equipBestPets,
@@ -67,7 +68,11 @@ function roll() {
   const zones = WORLD_ZONES[p.world]
   for (let z = before + 1; z <= p.stats[key]; z += 1) mark(`ZONE  ${zones[z].name} reached (+${formatNumber(zones[z].discover)} Wins prize)`)
   // Through the portal as soon as it opens.
-  if (process.env.NO_WORLD2 !== '1' && p.world === 0 && usePortal(p).ok) mark(`WORLD 2 with ${formatNumber(p.wins)} Wins`)
+  if (process.env.NO_WORLD2 !== '1' && p.world === 0 && usePortal(p).ok) {
+    mark(`PALM BEACH at R${p.rebirths} with ${formatNumber(p.wins)} Wins`)
+    // An active player finds the Secret Star soon after arriving (NO_STAR=1 to skip).
+    if (process.env.NO_STAR !== '1' && claimSecretStar(p)) mark('STAR  Secret Star found: x2 Power')
+  }
   return r
 }
 

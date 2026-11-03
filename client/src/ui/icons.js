@@ -157,26 +157,31 @@ const heart = svg(
 )
 
 /**
- * A ping pong paddle: red rubber blade with a white shine on a wooden handle, and a
- * ball. Still named `tire`, so every place that showed a tire shows a paddle.
+ * A football: brown leather with a soft shine, two white stripes at each end and white
+ * laces along the top, tilted, in a thick ink outline. Still named `tire`, so every place
+ * that showed a ball (the shop, the stands, the HUD) shows a football.
  */
+const FOOTBALL = 'M5 50C19 15 81 15 95 50C81 85 19 85 5 50Z'
 const tire = svg(
-  `<g transform="rotate(-35 50 50)">
-    <rect x="42" y="56" width="16" height="38" rx="6" fill="url(#pd-h)" stroke="${OUT}" stroke-width="6"/>
-    <circle cx="50" cy="36" r="30" fill="url(#pd-g)" stroke="${OUT}" stroke-width="6"/>
-    <path d="M32 26c4-8 11-12 19-13" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".7"/>
-  </g>
-  <circle cx="80" cy="78" r="12" fill="#ffffff" stroke="${OUT}" stroke-width="5"/>
-  <path d="M74 74c2-3 5-4 8-4" fill="none" stroke="#c9d3e0" stroke-width="3" stroke-linecap="round"/>`,
-  vgrad('pd-g', [
-    [0, '#ff8a7a'],
-    [0.5, '#ff3b3b'],
-    [1, '#c4102e'],
-  ]) +
-    vgrad('pd-h', [
-      [0, '#f2c48a'],
-      [1, '#b87a40'],
-    ]),
+  `<g transform="rotate(-32 50 50)">
+    <path d="${FOOTBALL}" fill="url(#fb-g)"/>
+    <g clip-path="url(#fb-c)" fill="none" stroke-linecap="round">
+      <g stroke="#fff" stroke-width="4">
+        <path d="M23 18Q14 50 23 82"/><path d="M32 16Q24 50 32 84"/>
+        <path d="M77 18Q86 50 77 82"/><path d="M68 16Q76 50 68 84"/>
+      </g>
+      <path d="M36 37H64" stroke="#fff" stroke-width="3.6"/>
+      <path d="M41 30V44M47 30V44M53 30V44M59 30V44" stroke="#fff" stroke-width="3.2"/>
+      <path d="M24 38Q36 24 54 23" stroke="#fff" stroke-width="5" opacity=".55"/>
+      <path d="M22 68Q40 80 70 76" stroke="#4a2008" stroke-width="5" opacity=".28"/>
+    </g>
+    <path d="${FOOTBALL}" fill="none" stroke="${OUT}" stroke-width="6" stroke-linejoin="round"/>
+  </g>`,
+  vgrad('fb-g', [
+    [0, '#d9814a'],
+    [0.5, '#a65228'],
+    [1, '#6e3014'],
+  ]) + `<clipPath id="fb-c"><path d="${FOOTBALL}"/></clipPath>`,
 )
 
 /** A round potion flask with a cork, filled with `liquid` and a small badge icon. */

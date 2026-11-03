@@ -52,7 +52,9 @@ function LevelBar() {
         boxShadow: `0 ${u(5)} 0 #111, inset 0 ${u(-6)} 0 rgba(0,0,0,0.2)`,
       }}
     >
-      <div className="absolute inset-y-0 left-0 transition-[width] duration-300 ease-out" style={{ width: `${fill * 100}%`, background: BAR_FILL }} />
+      {/* Grows by a transform, not its width: the bar fills on every Power gain (twice a
+          second on a treadmill), and an animated width re-laid-out the page every frame. */}
+      <div className="absolute inset-0 origin-left transition-transform duration-300 ease-out" style={{ transform: `scaleX(${fill})`, background: BAR_FILL }} />
       <div className="absolute" style={{ left: u(10), right: u(10), top: u(5), height: u(12), borderRadius: u(6), background: 'rgba(255,255,255,0.25)' }} />
       <div className="absolute inset-0 flex items-center justify-between" style={{ padding: `0 ${u(18)}`, fontSize: u(50) }}>
         <StrokeText stroke={u(10)}>{maxed ? `MAX LEVEL ${cap}` : `Level ${level}`}</StrokeText>

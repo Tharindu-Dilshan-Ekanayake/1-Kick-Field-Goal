@@ -1,8 +1,11 @@
+import { RUN_CADENCE } from '../game/kick'
+
+import { createCrowd } from './crowd'
 import { createMusic } from './music'
 
 /**
- * Sound effects and the background music, synthesised with WebAudio: no audio files
- * to download.
+ * Sound effects, the stadium crowd and the background music, synthesised with WebAudio:
+ * no audio files to download.
  *
  * Browsers only allow audio after a user gesture. The audio engine (AudioContext, echo,
  * noise, music) is built while the game loads (prepareAudio), where it costs nothing
@@ -21,6 +24,8 @@ let master = null
 let echo = null
 let noiseBuffer = null
 let music = null
+/** The stadium crowd (crowd.js): murmuring always, roaring at the big moments. */
+let crowd = null
 /** The player's own mute button (persisted). */
 let muted = readMuted()
 /**
@@ -70,6 +75,7 @@ export function prepareAudio() {
   for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1
   music = createMusic(ctx, master, noiseBuffer)
   music.setVolume(musicVolume)
+  crowd = createCrowd(ctx, master, noiseBuffer)
 }
 
 let musicStarted = false
@@ -80,6 +86,7 @@ function unlock() {
   if (!musicStarted) {
     musicStarted = true
     music.start()
+    crowd.start()
   }
   if (adMuted) ctx.suspend()
   else if (ctx.state === 'suspended') ctx.resume()
@@ -167,52 +174,56 @@ export function onMutedChange(listener) {
   return () => muteListeners.delete(listener)
 }
 
-// --- The roll: the sound of the tire rumbling down the track ----------------------------
+// --- The flight: the football tumbling through the air ----------------------------------
 
 let ride = null
 let rideSetAt = 0
 
 /**
- * One looping noise source through three bands: the rush of air (swelling with speed,
- * loudest in the air), the tire rumbling over the ground (its bumps quickening with
- * speed, silent in the air) and the hiss of its tread scrubbing (up as it skids). The
- * music ducks under it until `windStop`.
+ * The ball in flight: a low, soft "whup... whup..." as the football tumbles end over end,
+ * quickening with its speed - a round, low-passed sound with no hiss in it - while the
+ * crowd "ooohs". The music ducks under it until `windStop`.
  */
 function windStart() {
   if (!ctx || ride || ctx.state !== 'running') return
+  const t = ctx.currentTime
   const src = ctx.createBufferSource()
   src.buffer = noiseBuffer
   src.loop = true
-  const band = (type, frequency, q) => {
-    const filter = ctx.createBiquadFilter()
-    filter.type = type
-    filter.frequency.value = frequency
-    filter.Q.value = q
-    const gain = ctx.createGain()
-    gain.gain.value = 0.0001
-    src.connect(filter).connect(gain).connect(master)
-    return { filter, gain }
-  }
-  const air = band('bandpass', 400, 0.7)
-  const rumble = band('lowpass', 220, 0.9)
-  const carve = band('highpass', 3800, 0.7)
-  // Bumps in the ground: the rumble's loudness wobbles, faster the faster you go.
-  const bumps = ctx.createOscillator()
-  bumps.frequency.value = 7
+  // Only the low rush of air: everything above ~900 Hz is cut, which is what hissed.
+  const body = ctx.createBiquadFilter()
+  body.type = 'lowpass'
+  body.frequency.value = 420
+  body.Q.value = 0.8
+  const air = ctx.createGain()
+  air.gain.value = 0.0001
+  src.connect(body).connect(air).connect(master)
+  // The tumble: the air's loudness swells and dips once a turn.
+  const tumble = ctx.createOscillator()
+  tumble.frequency.value = 4
   const depth = ctx.createGain()
   depth.gain.value = 0
-  bumps.connect(depth).connect(rumble.gain.gain)
-  bumps.start()
-  src.start()
-  ride = { src, bumps, depth, air, rumble, carve }
+  tumble.connect(depth).connect(air.gain)
+  // A low hum under it, so it reads as a thing spinning, not wind.
+  const hum = ctx.createOscillator()
+  hum.type = 'triangle'
+  hum.frequency.value = 70
+  const humGain = ctx.createGain()
+  humGain.gain.value = 0.0001
+  hum.connect(humGain).connect(master)
+  src.start(t)
+  tumble.start(t)
+  hum.start(t)
+  ride = { src, air, body, tumble, depth, hum, humGain }
   music?.duck(true)
+  crowd?.anticipate(true)
 }
 
 /**
- * `level` 0..1 from the tire's speed down the track; `airborne` off a ramp; `skid` its
- * sideways skid (radians). Positional, not an object: it's called every frame.
+ * `level` 0..1 from the ball's speed; `airborne` while it flies (silent once it lands:
+ * the landing's own sounds take over). Positional: it's called every frame.
  */
-function windSet(level, airborne = false, skid = 0) {
+function windSet(level, airborne = false) {
   if (!ride) return
   // Ten updates a second is plenty for a smooth swell.
   const now = performance.now()
@@ -220,29 +231,84 @@ function windSet(level, airborne = false, skid = 0) {
   rideSetAt = now
   const t = ctx.currentTime
   const l = Math.min(1, Math.max(0, level))
-  const ground = airborne ? 0 : 1
-  ride.air.gain.gain.setTargetAtTime(0.03 + l * (airborne ? 0.26 : 0.17), t, 0.2)
-  ride.air.filter.frequency.setTargetAtTime(320 + l * 2400 + (airborne ? 500 : 0), t, 0.25)
-  const rumble = ground * (0.04 + l * 0.14)
-  ride.rumble.gain.gain.setTargetAtTime(rumble, t, 0.08)
-  ride.depth.gain.setTargetAtTime(rumble * 0.6, t, 0.08)
-  ride.rumble.filter.frequency.setTargetAtTime(160 + l * 380, t, 0.2)
-  ride.bumps.frequency.setTargetAtTime(6 + l * 16, t, 0.2)
-  ride.carve.gain.gain.setTargetAtTime(ground * (0.008 + l * 0.03 + Math.min(1, Math.abs(skid)) * 0.06), t, 0.1)
+  const on = airborne ? 1 : 0
+  const loud = on * (0.012 + l * 0.05)
+  ride.air.gain.setTargetAtTime(loud, t, 0.15)
+  ride.depth.gain.setTargetAtTime(loud * 0.8, t, 0.15)
+  ride.body.frequency.setTargetAtTime(300 + l * 600, t, 0.2)
+  ride.tumble.frequency.setTargetAtTime(3 + l * 7, t, 0.25)
+  ride.hum.frequency.setTargetAtTime(60 + l * 50, t, 0.25)
+  ride.humGain.gain.setTargetAtTime(on * (0.006 + l * 0.012), t, 0.15)
 }
 
 function windStop() {
   if (!ride) return
-  const { src, bumps, depth, air, rumble, carve } = ride
+  const { src, air, depth, tumble, hum, humGain } = ride
   ride = null
   const t = ctx.currentTime
-  air.gain.gain.setTargetAtTime(0.0001, t, 0.3)
-  rumble.gain.gain.setTargetAtTime(0.0001, t, 0.3)
-  carve.gain.gain.setTargetAtTime(0.0001, t, 0.3)
-  depth.gain.setTargetAtTime(0, t, 0.3)
-  src.stop(t + 1.5)
-  bumps.stop(t + 1.5)
+  air.gain.setTargetAtTime(0.0001, t, 0.15)
+  depth.gain.setTargetAtTime(0, t, 0.15)
+  humGain.gain.setTargetAtTime(0.0001, t, 0.15)
+  src.stop(t + 1)
+  tumble.stop(t + 1)
+  hum.stop(t + 1)
   music?.duck(false)
+  crowd?.anticipate(false)
+}
+
+// --- The treadmill: the belt's hum and your feet pounding it -------------------------
+
+/** Seconds between footfalls running on a treadmill: two a stride (kick.RUN_CADENCE). */
+const FOOTFALL = Math.PI / RUN_CADENCE
+let belt = null
+
+/**
+ * Starts the treadmill under you: the motor's soft whirr and your footfalls in time with
+ * the run (scheduled a little ahead on the audio clock, like the music). No hiss: the
+ * belt is a low hum and the steps are thuds. Stopped by treadmillStop when you step off.
+ */
+function treadmillStart() {
+  if (!ctx || belt || silent() || ctx.state !== 'running') return
+  const t = ctx.currentTime
+  const motor = ctx.createOscillator()
+  motor.type = 'triangle'
+  motor.frequency.setValueAtTime(35, t)
+  motor.frequency.exponentialRampToValueAtTime(74, t + 0.6)
+  const motorTone = ctx.createBiquadFilter()
+  motorTone.type = 'lowpass'
+  motorTone.frequency.value = 180
+  const motorGain = ctx.createGain()
+  motorGain.gain.setValueAtTime(0.0001, t)
+  motorGain.gain.setTargetAtTime(0.03, t, 0.3)
+  motor.connect(motorTone).connect(motorGain).connect(master)
+  motor.start(t)
+  let next = t + 0.35
+  let left = true
+  const schedule = () => {
+    next = Math.max(next, ctx.currentTime + 0.02)
+    while (next < ctx.currentTime + 0.3) {
+      // A soft thud of a trainer on rubber, each foot a touch different.
+      const at = next - ctx.currentTime
+      tone(left ? 88 : 98, { at, duration: 0.09, volume: 0.07, slideTo: 48 })
+      tone(left ? 210 : 230, { type: 'triangle', at, duration: 0.03, volume: 0.02, slideTo: 140 })
+      left = !left
+      next += FOOTFALL
+    }
+  }
+  belt = { motor, motorGain, timer: setInterval(schedule, 100) }
+  schedule()
+}
+
+/** Stepping off the treadmill: the belt winds down and the footfalls stop. */
+function treadmillStop() {
+  if (!belt) return
+  const { motor, motorGain, timer } = belt
+  belt = null
+  clearInterval(timer)
+  const t = ctx.currentTime
+  motorGain.gain.setTargetAtTime(0.0001, t, 0.2)
+  motor.frequency.setTargetAtTime(25, t, 0.3)
+  motor.stop(t + 1)
 }
 
 function ready(name, minGapMs = 0) {
@@ -321,7 +387,7 @@ export const sfx = {
   rollStart() {
     if (!ready('rollStart')) return
     tone(110, { duration: 0.18, volume: 0.16, slideTo: 55 })
-    noise({ duration: 0.7, volume: 0.3, from: 250, to: 3000, q: 0.8 })
+    noise({ duration: 0.3, volume: 0.12, from: 220, to: 900, q: 0.8 })
     tone(220, { type: 'triangle', duration: 0.32, volume: 0.09, slideTo: 660 })
     bell(1319, { at: 0.2, volume: 0.05, decay: 0.3 })
   },
@@ -329,29 +395,60 @@ export const sfx = {
   kickSwing() {
     if (ready('kickSwing', 200)) noise({ duration: 0.22, volume: 0.1, from: 600, to: 2200, q: 0.7 })
   },
-  /** The paddle smashing the serve: a crisp tok over a fat thump. */
+  /**
+   * The boot smashing the football: the deep thump of a pumped-up leather ball, the
+   * slap of the boot on it, and a hollow "pock" from inside the ball.
+   */
   kick() {
     if (!ready('kick', 200)) return
-    tone(130, { duration: 0.2, volume: 0.22, slideTo: 48 })
-    tone(1500, { duration: 0.05, volume: 0.22, slideTo: 1050 })
-    tone(3100, { type: 'triangle', duration: 0.025, volume: 0.06 })
-    noise({ duration: 0.04, volume: 0.18, from: 4200, to: 2400, q: 1.4 })
+    tone(118, { duration: 0.22, volume: 0.32, slideTo: 42 })
+    tone(240, { type: 'triangle', duration: 0.09, volume: 0.14, slideTo: 120 })
+    noise({ duration: 0.06, volume: 0.34, from: 1400, to: 520, q: 1.1 })
+    noise({ duration: 0.025, volume: 0.16, from: 3800, to: 2600, q: 1.5 })
+    tone(560, { duration: 0.06, volume: 0.06, slideTo: 380 })
+  },
+  /** A referee's whistle: a pea-whistle's trilling blast, two of them when `long`. */
+  whistle(long = false) {
+    if (!ready('whistle', 250)) return
+    const blasts = long ? [[0, 0.16], [0.24, 0.5]] : [[0, 0.24]]
+    for (const [at, length] of blasts) {
+      const t = ctx.currentTime + at
+      const osc = ctx.createOscillator()
+      osc.frequency.value = 2850
+      // The pea rattling in the whistle: a fast warble.
+      const pea = ctx.createOscillator()
+      pea.type = 'square'
+      pea.frequency.value = 32
+      const depth = ctx.createGain()
+      depth.gain.value = 150
+      pea.connect(depth).connect(osc.frequency)
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(0.0001, t)
+      gain.gain.exponentialRampToValueAtTime(0.07, t + 0.015)
+      gain.gain.setValueAtTime(0.07, t + length - 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + length)
+      osc.connect(gain).connect(master)
+      gain.connect(echo)
+      osc.start(t)
+      pea.start(t)
+      osc.stop(t + length + 0.02)
+      pea.stop(t + length + 0.02)
+    }
   },
   /**
-   * The ball slamming into the lane from the top of its arc (`power` 0-1, how high it
-   * fell): a deep boom, the ground cracking open, then rubble pattering down.
+   * The ball thumping down on the turf from the top of its arc (`power` 0-1, how high it
+   * fell): a deep, soft thud, the hollow bounce of the ball, a short scuff of grass, and
+   * a few clods of soil pattering down - the crowd roaring over it.
    */
   groundSmash(power = 1) {
     if (!ready('groundSmash', 400)) return
+    crowd?.roar(0.5 + 0.5 * power)
     const p = 0.6 + 0.4 * power
-    tone(95, { duration: 0.75, volume: 0.34 * p, slideTo: 30 })
-    tone(52, { type: 'triangle', duration: 0.6, volume: 0.2 * p, slideTo: 28 })
-    noise({ duration: 0.55, volume: 0.34 * p, from: 1400, to: 110, q: 0.7 })
-    noise({ duration: 0.11, volume: 0.3 * p, from: 5400, to: 1600, q: 1.2 })
-    noise({ at: 0.06, duration: 0.08, volume: 0.18 * p, from: 4200, to: 2200, q: 1.6 })
-    noise({ at: 0.08, duration: 1.0, volume: 0.09 * p, from: 2800, to: 500, q: 0.6 })
-    for (let i = 0; i < 8; i += 1) {
-      tone(220 + Math.random() * 480, { type: 'triangle', at: 0.16 + i * 0.075 + Math.random() * 0.05, duration: 0.05, volume: 0.05 * p, slideTo: 130 })
+    tone(95, { duration: 0.6, volume: 0.32 * p, slideTo: 32 })
+    tone(190, { type: 'triangle', duration: 0.14, volume: 0.1 * p, slideTo: 95 })
+    noise({ duration: 0.14, volume: 0.16 * p, from: 900, to: 280, q: 0.8 })
+    for (let i = 0; i < 5; i += 1) {
+      tone(300 + Math.random() * 220, { type: 'triangle', at: 0.14 + i * 0.07 + Math.random() * 0.04, duration: 0.04, volume: 0.03 * p, slideTo: 190 })
     }
   },
   /** The ball bouncing on after it lands (`n` 1, 2, 3...): a thud and a tok, softer each time. */
@@ -367,14 +464,14 @@ export const sfx = {
     tone(1800, { duration, volume: 0.045, slideTo: 420, attack: Math.min(0.3, duration * 0.2) })
   },
   /**
-   * A PERFECT hit: a crack of the paddle, fire bursting up with a deep fwoosh and a
+   * A PERFECT kick: a crack of the boot, fire bursting up with a deep fwoosh and a
    * crackle, and a bright chime climbing up.
    */
   perfectHit() {
     if (!ready('perfectHit', 300)) return
     tone(2200, { duration: 0.04, volume: 0.2, slideTo: 1400 })
-    noise({ duration: 0.45, volume: 0.22, from: 600, to: 5200, q: 0.9 })
-    noise({ duration: 0.8, volume: 0.26, from: 180, to: 900, q: 0.6 })
+    noise({ duration: 0.25, volume: 0.1, from: 500, to: 2400, q: 0.9 })
+    noise({ duration: 0.5, volume: 0.16, from: 160, to: 600, q: 0.6 })
     tone(90, { duration: 0.5, volume: 0.14, slideTo: 160 })
     for (let i = 0; i < 6; i += 1) noise({ at: 0.1 + i * 0.07 + Math.random() * 0.04, duration: 0.04, volume: 0.07, from: 3800, to: 2600, q: 2 })
     ;[784, 1047, 1319, 1568, 2093].forEach((f, i) => bell(f, { at: 0.04 + i * 0.05, volume: 0.07, decay: 0.35 }))
@@ -386,17 +483,17 @@ export const sfx = {
   perfectRelease(power = 1) {
     if (!ready('perfectRelease', 300)) return
     tone(70, { duration: 0.6, volume: 0.3 * power, slideTo: 32 })
-    noise({ duration: 0.5, volume: 0.28 * power, from: 300, to: 6000, q: 0.7 })
+    noise({ duration: 0.3, volume: 0.12 * power, from: 250, to: 1800, q: 0.7 })
     tone(440, { type: 'triangle', duration: 0.35, volume: 0.06 * power, slideTo: 1760 })
   },
-  /** The paddle smashing the ball on a graded hit: its own sound for each grade. */
+  /** The boot smashing the ball on a graded kick: its own sound for each grade. */
   gradeHit(grade) {
     if (grade === 'perfect') return sfx.perfectHit()
     if (!ready('gradeHit', 300)) return
     if (grade === 'great') {
       // An electric crack, a zap and a rising chime.
       tone(1800, { type: 'square', duration: 0.05, volume: 0.1, slideTo: 600 })
-      noise({ duration: 0.35, volume: 0.2, from: 2400, to: 7000, q: 1.4 })
+      noise({ duration: 0.16, volume: 0.1, from: 1800, to: 4000, q: 1.4 })
       ;[659, 988, 1319].forEach((f, i) => bell(f, { at: 0.03 + i * 0.05, volume: 0.07, decay: 0.3 }))
     } else {
       // A clean, bright tok and a sparkle.
@@ -405,20 +502,13 @@ export const sfx = {
       bell(2093, { at: 0.08, volume: 0.05, decay: 0.25 })
     }
   },
-  /** A WEAK hit: a dull, soft plop off the edge of the paddle. */
+  /** A WEAK kick: a dull, soft plop off the side of the boot. */
   weakHit() {
     if (!ready('weakHit', 300)) return
     tone(320, { duration: 0.12, volume: 0.12, slideTo: 140 })
     tone(180, { type: 'triangle', at: 0.08, duration: 0.18, volume: 0.06, slideTo: 90 })
   },
-  /** A ping pong ball off a paddle at a training table: a short, hollow tok. */
-  pong(soft = false) {
-    if (!ready('pong', 120)) return
-    const v = soft ? 0.05 : 0.1
-    tone(1350 + Math.random() * 150, { duration: 0.035, volume: v, slideTo: 1000 })
-    tone(2900, { type: 'triangle', duration: 0.018, volume: v * 0.3 })
-  },
-  /** The tire popping out in front of you when you press ROLL: a springy bloop. */
+  /** The ball dropping onto the tee in front of you when you press KICK: a springy bloop. */
   tirePop() {
     if (!ready('tirePop', 200)) return
     tone(420, { type: 'sine', duration: 0.16, volume: 0.14, slideTo: 980 })
@@ -426,7 +516,7 @@ export const sfx = {
   },
   /** Flying off a ramp: a rising rush of air. */
   jumpWhoosh() {
-    if (ready('jumpWhoosh', 250)) noise({ duration: 0.4, volume: 0.18, from: 500, to: 2600, q: 0.9 })
+    if (ready('jumpWhoosh', 250)) noise({ duration: 0.25, volume: 0.08, from: 300, to: 1200, q: 0.9 })
   },
   /** The tire slapping back down after a jump: a thump and a crunch of gravel. */
   tireLand() {
@@ -458,6 +548,7 @@ export const sfx = {
   /** A new stage reached mid-roll: a quick, cheerful rising jingle. */
   stageUp() {
     if (!ready('stageUp', 300)) return
+    crowd?.whoo(2)
     ;[659, 784, 988, 1319].forEach((f, i) => tone(f, { type: 'triangle', at: i * 0.06, duration: 0.16, volume: 0.08, echo: true }))
     for (let i = 0; i < 3; i += 1) bell(1760 + Math.random() * 900, { at: 0.24 + i * 0.05, volume: 0.03, decay: 0.18 })
   },
@@ -489,6 +580,7 @@ export const sfx = {
   /** Wins paid out (a roll's total, a badge): a fanfare, a shimmering chord and a shower of coins. */
   wins() {
     if (!ready('wins')) return
+    crowd?.applause()
     ;[784, 988, 1175, 1568].forEach((f, i) => tone(f, { type: 'triangle', at: i * 0.07, duration: 0.2, volume: 0.1, echo: true }))
     // G major, held, each voice doubled a hair apart so it shimmers.
     for (const f of [784, 988, 1175]) {
@@ -516,14 +608,18 @@ export const sfx = {
   },
   rebirth() {
     if (!ready('rebirth')) return
-    noise({ duration: 0.8, volume: 0.15, from: 200, to: 4000, q: 0.6 })
+    sfx.whistle(true)
+    crowd?.roar(1)
+    noise({ duration: 0.5, volume: 0.07, from: 200, to: 1800, q: 0.6 })
     ;[262, 330, 392, 523, 659, 784].forEach((f, i) => tone(f, { type: 'sawtooth', at: 0.1 + i * 0.07, duration: 0.25, volume: 0.06 }))
   },
-  /** Stepping onto an unlocked training pad: a soft rising chime. */
+  /** Stepping onto an unlocked treadmill: a soft rising chime, and the belt starts. */
   treadmillEnter() {
     if (!ready('treadmillEnter', 400)) return
     ;[523, 784, 1047].forEach((f, i) => tone(f, { type: 'sine', at: i * 0.05, duration: 0.28, volume: 0.07 }))
+    treadmillStart()
   },
+  treadmillStop,
   /** A jump: a springy little boing. */
   jump() {
     if (ready('jump', 120)) tone(260, { type: 'triangle', duration: 0.18, volume: 0.1, slideTo: 620 })
@@ -535,16 +631,13 @@ export const sfx = {
     noise({ duration: 0.08, volume: 0.06, from: 900, to: 300, q: 0.7 })
   },
   /**
-   * The tire skidding to a stop, timed to end as it does: grit spraying off the tread
-   * (bright, then darker as it slows), the rubber grinding under it, then a bump and a
-   * little bounce as it settles.
+   * The ball settling at the end of its hops: two soft thuds on the turf, the second
+   * smaller. (Only tones: the old tire's grit spray hissed.)
    */
   rollStop() {
     if (!ready('rollStop')) return
-    noise({ duration: 0.85, volume: 0.2, from: 5200, to: 700, q: 0.5 })
-    noise({ duration: 0.8, volume: 0.12, from: 380, to: 120, q: 0.9 })
-    tone(130, { at: 0.82, duration: 0.22, volume: 0.16, slideTo: 60 })
-    tone(220, { type: 'triangle', at: 0.96, duration: 0.1, volume: 0.05, slideTo: 330 })
+    tone(120, { duration: 0.16, volume: 0.1, slideTo: 55 })
+    tone(140, { at: 0.22, duration: 0.12, volume: 0.05, slideTo: 70 })
   },
   windStart,
   windSet,

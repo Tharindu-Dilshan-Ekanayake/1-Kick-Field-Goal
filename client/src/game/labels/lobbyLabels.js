@@ -1,10 +1,11 @@
 import { EGGS, PADS, PETS, RARITIES, SHOP, TIRES, WORLD_PORTALS, WORLDS } from '@shared/balance'
 import { formatNumber } from '@shared/format'
 import { isPadUnlocked } from '@shared/logic'
-import { EGG_STANDS, FREE_REWARD, PAD_HEIGHT, padCenterZ, PORTALS, SPHINX_STAND, TABLE_X, TIRE_STANDS } from '@shared/world'
+import { EGG_STANDS, FREE_REWARD, padCenterZ, PORTALS, SPHINX_STAND, TABLE_X, TIRE_STANDS } from '@shared/world'
 
 import { eggHeight } from '../world/eggs'
-import { PAD_THEMES } from '../world/structures'
+import { BOARD_BOTTOM, BOARD_HEIGHT, PAD_THEMES } from '../world/structures'
+import { SCOREBOARD } from '../world/terrain'
 
 /**
  * Text styles, as gradients top-to-bottom, matching the reference signage.
@@ -20,13 +21,21 @@ export const TEXT = {
 
 const tint = (hex) => ['#ffffff', hex, hex]
 
-/** "4x POWER / 2 Rebirths", "1x POWER / UNLOCKED", "40x POWER / VERY OP! / 150K Wins"... */
-export function padLabelSpec(index, unlocked) {
+/**
+ * "x4 POWER / Turbo Treadmill / LOCKED: 2 Rebirths", "x1 POWER / Starter Treadmill / FREE",
+ * "x40 POWER / VERY OP! / 150K Wins"... (hung on each treadmill's backboard).
+ */
+export function padLabelSpec(index, unlocked, world = 0) {
   const pad = PADS[index]
   const theme = PAD_THEMES[index]
-  const lines = [{ text: `${formatNumber(pad.mult)}x POWER`, size: 54, icon: 'heart', gradient: tint(theme.text) }]
+  const lines = [
+    { text: `x${formatNumber(pad.mult)} POWER`, size: 54, icon: 'heart', gradient: tint(theme.text) },
+    { text: pad.name, size: 34, fill: '#ffffff' },
+  ]
   if (unlocked) {
     lines.push({ text: pad.rebirths === 0 && !pad.product ? 'FREE' : 'UNLOCKED', size: 44, gradient: TEXT.green })
+  } else if (pad.world !== undefined && world !== pad.world) {
+    lines.push({ text: `${WORLDS[pad.world].name.toUpperCase()} ONLY`, size: 44, icon: 'portal', gradient: TEXT.blue })
   } else if (pad.product) {
     lines.push({ text: pad.tag, size: 46, rainbow: true })
     lines.push({ text: `${formatNumber(SHOP[pad.product].price)} Wins`, size: 42, icon: 'trophy', gradient: TEXT.gold })
@@ -34,13 +43,16 @@ export function padLabelSpec(index, unlocked) {
     const word = pad.rebirths === 1 ? 'Rebirth' : 'Rebirths'
     lines.push({ text: `LOCKED: ${pad.rebirths} ${word}`, size: 44, icon: 'rebirth', gradient: TEXT.red })
   }
-  return { lines, pxPerUnit: 50 }
+  return { lines, pxPerUnit: 64 }
 }
 
 /** Largest a pad label can get, so its atlas slot fits every state. */
 const padReserve = (index) => {
   const pad = PADS[index]
-  const lines = [{ text: `${formatNumber(pad.mult)}x POWER`, size: 54, icon: 'heart' }]
+  const lines = [
+    { text: `x${formatNumber(pad.mult)} POWER`, size: 54, icon: 'heart' },
+    { text: pad.name, size: 34 },
+  ]
   if (pad.product) {
     lines.push({ text: pad.tag, size: 46 })
     lines.push({ text: `${formatNumber(SHOP[pad.product].price)} Wins`, size: 42, icon: 'trophy' })
@@ -53,15 +65,17 @@ const padReserve = (index) => {
 export function padLabels(profile) {
   return PADS.map((pad, i) => ({
     id: `pad-${i}`,
-    // Over the table, clear of the robot's head.
-    position: [TABLE_X, PAD_HEIGHT + (pad.product ? 4.6 : 3.9), padCenterZ(i)],
-    spec: padLabelSpec(i, isPadUnlocked(profile, i)),
+    // Well in front of the treadmill's backboard (structures.js), centred on it: the label
+    // turns to face the camera and is wider than the board, so any nearer and its far half
+    // swings behind the board seen from an angle.
+    position: [TABLE_X - 2.2, BOARD_BOTTOM + BOARD_HEIGHT / 2, padCenterZ(i)],
+    spec: padLabelSpec(i, isPadUnlocked(profile, i), profile.world || 0),
     reserve: padReserve(i),
     fade: 150,
   }))
 }
 
-/** Ownership state of each tire stand: 'equipped' | 'owned' | 'buy' | 'locked'. */
+/** Ownership state of each ball stand: 'equipped' | 'owned' | 'buy' | 'locked'. */
 export function standState(profile, index) {
   const tire = TIRES[index]
   if (profile.equippedTire === tire.id) return 'equipped'
@@ -70,7 +84,7 @@ export function standState(profile, index) {
   return !previous || profile.ownedTires.includes(previous.id) ? 'buy' : 'locked'
 }
 
-/** A tire's rarity line: in its rarity's colour, rainbow for the Secret ones. */
+/** A ball's rarity line: in its rarity's colour, rainbow for the Secret ones. */
 const rarityLine = (tire) => {
   const rarity = RARITIES[tire.rarity]
   return tire.rarity === 'secret'
@@ -78,22 +92,26 @@ const rarityLine = (tire) => {
     : { text: rarity.name.toUpperCase(), size: 34, gradient: tint(rarity.color) }
 }
 
-/** "MYTHIC" over "Diamond Paddle", "+7M" and "1B Wins", "Owned" or "Equipped". */
+/**
+ * Like the reference: a state tag (EQUIPPED / OWNED / CAN BUY! / LOCKED), the ball's name,
+ * "+3 per kick", then its price in Wins - or its rarity once it's yours.
+ */
 export function standLabelSpec(index, state) {
   const tire = TIRES[index]
-  const status =
+  const tag =
     state === 'equipped'
-      ? { text: 'Equipped', size: 40, gradient: TEXT.green }
+      ? { text: 'EQUIPPED', size: 36, gradient: TEXT.green }
       : state === 'owned'
-        ? { text: 'Owned', size: 40, gradient: TEXT.blue }
-        : { text: `${formatNumber(tire.cost)} Wins`, size: 40, icon: 'trophy', gradient: state === 'locked' ? TEXT.red : TEXT.price }
+        ? { text: 'OWNED', size: 36, gradient: TEXT.blue }
+        : state === 'buy'
+          ? { text: 'CAN BUY!', size: 36, gradient: TEXT.green }
+          : { text: 'LOCKED', size: 36, gradient: TEXT.red }
+  const last =
+    state === 'equipped' || state === 'owned'
+      ? rarityLine(tire)
+      : { text: `${formatNumber(tire.cost)} Wins`, size: 40, icon: 'trophy', gradient: state === 'locked' ? TEXT.red : TEXT.price }
   return {
-    lines: [
-      rarityLine(tire),
-      { text: tire.name, size: 46, fill: '#ffffff' },
-      { text: `+${formatNumber(tire.power)}`, size: 42, icon: 'heart', gradient: TEXT.gold },
-      status,
-    ],
+    lines: [tag, { text: tire.name, size: 46, fill: '#ffffff' }, { text: `+${formatNumber(tire.power)} per kick`, size: 40, icon: 'heart', gradient: TEXT.gold }, last],
     pxPerUnit: 70,
   }
 }
@@ -101,9 +119,9 @@ export function standLabelSpec(index, state) {
 /** Largest a stand label can get, so its atlas slot fits every state. */
 const standReserve = (index) => ({
   lines: [
-    { text: 'LEGENDARY', size: 36 },
+    { text: 'CAN BUY!', size: 36 },
     { text: TIRES[index].name, size: 46 },
-    { text: `+${formatNumber(TIRES[index].power)}`, size: 42, icon: 'heart' },
+    { text: `+${formatNumber(TIRES[index].power)} per kick`, size: 40, icon: 'heart' },
     { text: `${formatNumber(TIRES[index].cost)} Wins`, size: 40, icon: 'trophy' },
   ],
 })
@@ -119,13 +137,20 @@ export function standLabels(profile) {
   }))
 }
 
-export function eggLabels() {
+/** The big eggs' title colours. */
+const BIG_EGG_TEXT = { volcano: TEXT.red, beach: TEXT.blue }
+
+export function eggLabels(profile) {
   return EGG_STANDS.map((stand) => {
     const egg = EGGS[stand.eggId]
+    // A world's own egg, seen from another world: where to go for it.
+    const elsewhere = egg.world !== undefined && (profile?.world || 0) !== egg.world
     const lines = stand.big
       ? [
-          { text: 'Volcano Egg', size: 54, gradient: TEXT.red },
-          { text: `${formatNumber(egg.cost.wins)} Wins`, size: 46, icon: 'trophy', gradient: TEXT.gold },
+          { text: `${egg.name} Egg`, size: 54, gradient: BIG_EGG_TEXT[stand.eggId] || TEXT.red },
+          elsewhere
+            ? { text: `${WORLDS[egg.world].name.toUpperCase()} ONLY`, size: 44, icon: 'portal', gradient: TEXT.blue }
+            : { text: `${formatNumber(egg.cost.wins)} Wins`, size: 46, icon: 'trophy', gradient: TEXT.gold },
         ]
       : [
           { text: `${egg.name} Egg`, size: 50, fill: '#ffffff' },
@@ -165,6 +190,20 @@ export function sphinxLabel(stock) {
   }
 }
 
+/** The jumbotron over the south stand, lettered like the arch: the game's name. */
+const scoreboardLabel = () => ({
+  id: 'scoreboard',
+  position: [SCOREBOARD.x, SCOREBOARD.y + 0.8 + SCOREBOARD.height / 2, SCOREBOARD.z - 1.5],
+  spec: {
+    lines: [
+      { text: 'KICK FIELD GOAL', size: 100, gradient: TEXT.gold },
+      { text: 'KICK FAR - WIN BIG - REBIRTH', size: 44, gradient: TEXT.white },
+    ],
+    pxPerUnit: 34,
+  },
+  fade: 220,
+})
+
 const freeRewardLabel = () => ({
   id: 'free-reward',
   position: [FREE_REWARD.x, 4.6, FREE_REWARD.z],
@@ -172,24 +211,41 @@ const freeRewardLabel = () => ({
   fade: 90,
 })
 
-/** Where the portal goes: World 2 (and the Wins it needs, until it's open), or home. */
+/**
+ * Where the portal goes: Palm Beach (and what opens it - rebirths and Wins - until it's
+ * open), or home.
+ */
 const portalLabel = (profile) => (portal) => {
   const home = profile.world === 1
   const open = profile.world2Unlocked
-  const second = home
-    ? { text: 'Back to World 1', size: 42, gradient: TEXT.white }
-    : open
-      ? { text: `x${WORLDS[1].wins} Wins!`, size: 46, icon: 'trophy', gradient: TEXT.gold }
-      : { text: `Need ${formatNumber(WORLD_PORTALS[portal.id].wins)} Wins`, size: 42, icon: 'trophy', gradient: TEXT.white }
+  const need = WORLD_PORTALS[portal.id]
+  const lines = home
+    ? [
+        { text: WORLDS[0].name.toUpperCase(), size: 56, gradient: TEXT.green },
+        { text: 'Back home', size: 42, gradient: TEXT.white },
+      ]
+    : [
+        { text: WORLDS[1].name.toUpperCase(), size: 60, gradient: TEXT.blue },
+        open
+          ? { text: `x${WORLDS[1].wins} Wins!`, size: 46, icon: 'trophy', gradient: TEXT.gold }
+          : { text: `${need.rebirths} Rebirths + ${formatNumber(need.wins)} Wins`, size: 40, icon: 'rebirth', gradient: TEXT.white },
+      ]
   return {
     id: `portal-${portal.id}`,
     position: [portal.x, portal.radius * 2 + 2.8, portal.z],
-    spec: { lines: [{ text: home ? 'WORLD 1' : 'WORLD 2', size: 60, gradient: TEXT.green }, second], pxPerUnit: 56 },
+    spec: { lines, pxPerUnit: 56 },
+    // Big enough for either side of the portal.
+    reserve: {
+      lines: [
+        { text: WORLDS[0].name.toUpperCase(), size: 60 },
+        { text: `${need.rebirths} Rebirths + ${formatNumber(need.wins)} Wins`, size: 46, icon: 'rebirth' },
+      ],
+    },
     fade: 140,
   }
 }
 
 /** Every label in the lobby. */
 export function lobbyLabels(profile, { sphinxStock = 0 } = {}) {
-  return [...padLabels(profile), ...standLabels(profile), ...eggLabels(), sphinxLabel(sphinxStock), freeRewardLabel(), ...PORTALS.map(portalLabel(profile))]
+  return [...padLabels(profile), ...standLabels(profile), ...eggLabels(profile), sphinxLabel(sphinxStock), scoreboardLabel(), freeRewardLabel(), ...PORTALS.map(portalLabel(profile))]
 }

@@ -36,9 +36,9 @@ export const STYLE = {
   ROAD: 10,
   /** Falling water: bright streaks scrolling down. */
   WATER: 11,
-  /** Treadmill belt: dark rubber with ribs scrolling east along the top. */
+  /** Treadmill belt: dark rubber with ribs sliding west (back under an east-facing runner). */
   BELT: 12,
-  /** Big two-tone checker squares over stud tiles: the serve lane's fields. */
+  /** Big two-tone checker squares over stud tiles: the kick field's surroundings. */
   CHECKER: 13,
 }
 
@@ -189,9 +189,9 @@ const fragmentBody = /* glsl */ `
       totalEmissiveRadiance += col * 0.25;
     } else if (style < 13.0) {
       if (isTop) {
-        // Belt: ribs running east under the runner's feet.
+        // Belt: ribs sliding back (west) under the runner's feet.
         vec2 bw = fwidth(vToyPos.xz);
-        float rib = smoothstep(0.72, 0.86, fract(vToyPos.x * 1.6 - uTime * 2.4));
+        float rib = smoothstep(0.72, 0.86, fract(vToyPos.x * 1.6 + uTime * 2.4));
         col = mix(col, col * 2.4 + vec3(0.07), rib * 0.8 * (1.0 - smoothstep(0.15, 0.4, bw.x)));
       }
     } else {

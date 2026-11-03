@@ -11,9 +11,10 @@ import { zones } from '../worldLook'
 import { roll } from './rollControl'
 
 /**
- * Something in the air of every stage while your tire rolls through it: snow on Frozen
- * Peaks, autumn leaves, cherry petals, embers rising off the volcano, bubbles over the
- * reef, fireflies in the jungle, sparkles in Candy Land, star dust in space...
+ * Something in the air of every stage while your ball flies over it: snow on the Frozen
+ * Tundra, autumn leaves at High School, blossom petals at College, embers rising off the
+ * Volcano, bubbles over the Coral Arena, fireflies in the jungle, sparkles in the Candy
+ * Bowl, star dust in space...
  *
  * One fixed pool of little glowing boxes (one draw call) kept in a box round the camera:
  * whatever drifts out of it, or is left behind as the camera races on, comes back in

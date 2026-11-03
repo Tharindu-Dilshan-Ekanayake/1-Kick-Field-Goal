@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import { Color, InstancedMesh, Matrix4, PlaneGeometry, Quaternion, ShaderMaterial, Vector3 } from 'three'
 
-import { groundHeightAt, TRACK_START_Z, SLOPE_ANGLE } from '@shared/world'
+import { groundHeightAt, inRollZone, TRACK_START_Z, SLOPE_ANGLE } from '@shared/world'
 
 import { useQuality } from '../store/quality'
 import { runtime } from './runtime'
@@ -97,7 +97,11 @@ export function BlobShadows() {
       const floor = onSlope ? slopeY(p.z) : groundHeightAt(p.x, p.z)
       const lift = Math.max(0, p.y - floor)
       const size = caster.size * Math.max(0.35, 1 - lift * 0.12)
-      _p.set(p.x, floor + 0.04, p.z)
+      // Lifted clear of whatever lies on the floor there (3 cm or more over it): the lobby
+      // field's lines and decals (0.04), the kick zone's strip and lettering (0.18), the
+      // kick field's yard and stage lines (0.14).
+      const clear = onSlope ? 0.18 : inRollZone(p.x, p.z, 1) ? 0.22 : 0.09
+      _p.set(p.x, floor + clear, p.z)
       _s.set(size, onSlope ? size * 1.6 : size, 1)
       mesh.setMatrixAt(i, _m.compose(_p, onSlope ? _qSlope : _q, _s))
       i += 1

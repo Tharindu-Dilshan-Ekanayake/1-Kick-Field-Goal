@@ -13,13 +13,14 @@ const SUN_DISTANCE = 70
 const SHADOW_EXTENT = 28
 
 /**
- * Bright, even daylight: a white hemisphere fill and a warm sun.
+ * Golden-hour game-day light: a cool sky fill with a warm bounce off the turf, and a warm,
+ * low sun in the north-west (where the sky glows: skyState.sunDirection matches it).
  *
  * Only the HIGH preset casts realtime shadows; lower presets use blob shadows instead
  * (see BlobShadows), so the shadow pass costs nothing there.
  *
  * A directional light's shadow only covers a fixed box around its target, so the sun
- * and its target follow the player, and your tire down the track while it rolls.
+ * and its target follow the player, and your ball down the field while it flies.
  */
 export function Lighting() {
   const sunRef = useRef(null)

@@ -1,5 +1,7 @@
 import { Vector3 } from 'three'
 
+import { setText } from '../roll/hudLink'
+
 /**
  * Floating "+12 POWER" text: a fixed pool of DOM elements (max 10 alive), positioned
  * by projecting a world point each frame. When the pool is full the oldest popup is
@@ -75,7 +77,7 @@ export function spawnPopup(text, position, style = {}) {
   const shown = slot.shown
   if (shown.text !== text) {
     shown.text = text
-    for (const t of slot.texts) t.textContent = text
+    for (const t of slot.texts) setText(t, text)
   }
   const gradient = style.gradient || DEFAULT_GRADIENT
   if (slot.texts[1] && shown.gradient !== gradient) {

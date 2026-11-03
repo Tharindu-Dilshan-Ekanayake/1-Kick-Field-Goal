@@ -3,14 +3,15 @@ canDie: false
 hasScore: true
 ---
 
-# Ping Pong Training: Boxity integration
+# +1 Kick Field Goal: Boxity integration
 
-The player cannot die: there is no death or game-over screen. You rally at a ping pong
-table for Power, serve your ball down the track as far as your Power takes it (a timing
-meter adds up to x1.5 Wins), and you always get another serve.
+The player cannot die: there is no death or game-over screen. You run on a treadmill for
+Power, kick your football down the field as far as your Power takes it (a timing meter adds
+up to x1.6 Wins), and you always get another kick.
 
 Built on the +1 Tire Rolling template: inside the code the old names stay (`health` is
-Power, a `tire` is a paddle, a `pad` is a training table, a `roll` is a serve).
+Power, a `tire` is a ball - football, soccer ball, basketball... - a `pad` is a treadmill, a
+`roll` is a kick, a metre is a yard).
 
 ## Leaderboards
 
@@ -23,7 +24,7 @@ player leaves, each pod sends the changed scores of its verified players to
 |------------|------------------|--------------------------------------|---------|
 | `rebirths` | Rebirths         | `profile.rebirths`                   | number  |
 | `wins`     | Total Wins       | `profile.stats.totalWins`            | compact |
-| `distance` | Longest Serve (m) | `floor(profile.stats.bestDistance)`  | compact |
+| `distance` | Longest Kick (yd) | `floor(profile.stats.bestDistance)`  | compact |
 | `playtime` | Minutes Played   | `floor(profile.stats.playtime / 60)` | number  |
 
 All four are `order: desc`, `mode: best`, `reset: none`.
